@@ -1,0 +1,44 @@
+{
+  "bg1": {
+    "label": "Mosque arches",
+    "title": "File:Interior of the Juma Mosque 5.jpg",
+    "artist": "Reda Kerbush",
+    "license": "CC BY-SA 4.0",
+    "source": "https://commons.wikimedia.org/wiki/File%3AInterior%20of%20the%20Juma%20Mosque%205.jpg"
+  },
+  "bg2": {
+    "label": "Desert night sky",
+    "title": "File:Milky Way Night Sky Black Rock Desert Nevada.jpg",
+    "artist": "Steve Jurvetson",
+    "license": "CC BY 2.0",
+    "source": "https://commons.wikimedia.org/wiki/File%3AMilky%20Way%20Night%20Sky%20Black%20Rock%20Desert%20Nevada.jpg"
+  },
+  "bg3": {
+    "label": "Rain on leaves",
+    "title": "File:Rain drops on autumn leaves.jpg",
+    "artist": "Lorraine Wenham",
+    "license": "CC BY 4.0",
+    "source": "https://commons.wikimedia.org/wiki/File%3ARain%20drops%20on%20autumn%20leaves.jpg"
+  },
+  "bg4": {
+    "label": "Ocean at sunset",
+    "title": "File:Waves at La Corniche.jpg",
+    "artist": "Christian Ferrer",
+    "license": "CC BY 4.0",
+    "source": "https://commons.wikimedia.org/wiki/File%3AWaves%20at%20La%20Corniche.jpg"
+  },
+  "bg5": {
+    "label": "Campfire night",
+    "title": "File:Campfire and sparks in Anttoora 3.jpg",
+    "artist": "kallerna",
+    "license": "CC BY-SA 3.0",
+    "source": "https://commons.wikimedia.org/wiki/File%3ACampfire%20and%20sparks%20in%20Anttoora%203.jpg"
+  },
+  "bg6": {
+    "label": "Snowy forest",
+    "title": "File:Forest and stream (IA Foreststreamv62).pdf",
+    "artist": "",
+    "license": "Public domain",
+    "source": "https://commons.wikimedia.org/wiki/File%3AForest%20and%20stream%20%28IA%20Foreststreamv62%29.pdf"
+  }
+}

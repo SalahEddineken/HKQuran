@@ -1,0 +1,21 @@
+name: objective_c
+description: >-
+  Project-local stub of package:objective_c. The real package ships a build
+  hook (hook/build.dart) that crashes when the pub cache path contains
+  spaces (Windows Process.runInShell bug). This stub exists only so `pub`
+  can resolve path_provider_foundation on Windows; the code inside is never
+  compiled on web/Windows targets.
+version: 9.5.0
+homepage: https://github.com/dart-lang/native
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  code_assets: any
+  collection: any
+  ffi: any
+  hooks: any
+  logging: any
+  meta: any
+  pub_semver: any
