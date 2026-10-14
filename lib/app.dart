@@ -15,31 +15,59 @@ class NoorApp extends StatefulWidget {
 }
 
 class _NoorAppState extends State<NoorApp> {
+  late Locale _locale;
+  late AppThemeMode _themeMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _locale = widget.state.locale;
+    _themeMode = widget.state.themeMode;
+    widget.state.addListener(_onStateChange);
+  }
+
+  @override
+  void dispose() {
+    widget.state.removeListener(_onStateChange);
+    super.dispose();
+  }
+
+  void _onStateChange() {
+    final s = widget.state;
+    if (s.locale != _locale || s.themeMode != _themeMode) {
+      setState(() {
+        _locale = s.locale;
+        _themeMode = s.themeMode;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
+    final theme = noorTheme(_themeMode.brightness, _themeMode.seed);
     return AppStateScope(
       state: s,
-      child: ListenableBuilder(
-        listenable: s,
-        builder: (context, _) {
-          final theme = noorTheme(s.themeMode.brightness, s.themeMode.seed);
-          return MaterialApp(
-            title: 'Noor',
-            debugShowCheckedModeBanner: false,
-            locale: s.locale,
-            supportedLocales: const [Locale('en'), Locale('ar')],
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            theme: theme,
-            darkTheme: theme,
-            themeMode: ThemeMode.light,
-            home: const HomeScreen(),
-          );
-        },
+      child: MaterialApp(
+        title: 'Noor',
+        debugShowCheckedModeBanner: false,
+        locale: _locale,
+        supportedLocales: const [Locale('en'), Locale('ar')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: theme,
+        darkTheme: theme,
+        themeMode: ThemeMode.light,
+        builder: (context, child) => Directionality(
+          textDirection: _locale.languageCode == 'ar'
+              ? TextDirection.rtl
+              : TextDirection.ltr,
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: const HomeScreen(),
       ),
     );
   }

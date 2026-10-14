@@ -1,0 +1,212 @@
+[
+  {
+    "id": 1,
+    "number": 1,
+    "nameAr": "الجزء الأول",
+    "startAyah": 1,
+    "endAyah": 148
+  },
+  {
+    "id": 2,
+    "number": 2,
+    "nameAr": "الجزء الثاني",
+    "startAyah": 149,
+    "endAyah": 259
+  },
+  {
+    "id": 3,
+    "number": 3,
+    "nameAr": "الجزء الثالث",
+    "startAyah": 260,
+    "endAyah": 385
+  },
+  {
+    "id": 4,
+    "number": 4,
+    "nameAr": "الجزء الرابع",
+    "startAyah": 386,
+    "endAyah": 516
+  },
+  {
+    "id": 5,
+    "number": 5,
+    "nameAr": "الجزء الخامس",
+    "startAyah": 517,
+    "endAyah": 640
+  },
+  {
+    "id": 6,
+    "number": 6,
+    "nameAr": "الجزء السادس",
+    "startAyah": 641,
+    "endAyah": 750
+  },
+  {
+    "id": 7,
+    "number": 7,
+    "nameAr": "الجزء السابع",
+    "startAyah": 751,
+    "endAyah": 899
+  },
+  {
+    "id": 8,
+    "number": 8,
+    "nameAr": "الجزء الثامن",
+    "startAyah": 900,
+    "endAyah": 1041
+  },
+  {
+    "id": 9,
+    "number": 9,
+    "nameAr": "الجزء التاسع",
+    "startAyah": 1042,
+    "endAyah": 1230
+  },
+  {
+    "id": 10,
+    "number": 10,
+    "nameAr": "الجزء العاشر",
+    "startAyah": 1231,
+    "endAyah": 1414
+  },
+  {
+    "id": 11,
+    "number": 11,
+    "nameAr": "الجزء الحادي عشر",
+    "startAyah": 1415,
+    "endAyah": 1597
+  },
+  {
+    "id": 12,
+    "number": 12,
+    "nameAr": "الجزء الثاني عشر",
+    "startAyah": 1598,
+    "endAyah": 1773
+  },
+  {
+    "id": 13,
+    "number": 13,
+    "nameAr": "الجزء الثالث عشر",
+    "startAyah": 1774,
+    "endAyah": 1934
+  },
+  {
+    "id": 14,
+    "number": 14,
+    "nameAr": "الجزء الرابع عشر",
+    "startAyah": 1935,
+    "endAyah": 2078
+  },
+  {
+    "id": 15,
+    "number": 15,
+    "nameAr": "الجزء الخامس عشر",
+    "startAyah": 2079,
+    "endAyah": 2213
+  },
+  {
+    "id": 16,
+    "number": 16,
+    "nameAr": "الجزء السادس عشر",
+    "startAyah": 2214,
+    "endAyah": 2395
+  },
+  {
+    "id": 17,
+    "number": 17,
+    "nameAr": "الجزء السابع عشر",
+    "startAyah": 2396,
+    "endAyah": 2548
+  },
+  {
+    "id": 18,
+    "number": 18,
+    "nameAr": "الجزء الثامن عشر",
+    "startAyah": 2549,
+    "endAyah": 2722
+  },
+  {
+    "id": 19,
+    "number": 19,
+    "nameAr": "الجزء التاسع عشر",
+    "startAyah": 2723,
+    "endAyah": 2889
+  },
+  {
+    "id": 20,
+    "number": 20,
+    "nameAr": "الجزء العشرون",
+    "startAyah": 2890,
+    "endAyah": 3050
+  },
+  {
+    "id": 21,
+    "number": 21,
+    "nameAr": "الجزء الحادي والعشرون",
+    "startAyah": 3051,
+    "endAyah": 3187
+  },
+  {
+    "id": 22,
+    "number": 22,
+    "nameAr": "الجزء الثاني والعشرون",
+    "startAyah": 3188,
+    "endAyah": 3325
+  },
+  {
+    "id": 23,
+    "number": 23,
+    "nameAr": "الجزء الثالث والعشرون",
+    "startAyah": 3326,
+    "endAyah": 3495
+  },
+  {
+    "id": 24,
+    "number": 24,
+    "nameAr": "الجزء الرابع والعشرون",
+    "startAyah": 3496,
+    "endAyah": 3667
+  },
+  {
+    "id": 25,
+    "number": 25,
+    "nameAr": "الجزء الخامس والعشرون",
+    "startAyah": 3668,
+    "endAyah": 3838
+  },
+  {
+    "id": 26,
+    "number": 26,
+    "nameAr": "الجزء السادس والعشرون",
+    "startAyah": 3839,
+    "endAyah": 4006
+  },
+  {
+    "id": 27,
+    "number": 27,
+    "nameAr": "الجزء السابع والعشرون",
+    "startAyah": 4007,
+    "endAyah": 4203
+  },
+  {
+    "id": 28,
+    "number": 28,
+    "nameAr": "الجزء الثامن والعشرون",
+    "startAyah": 4204,
+    "endAyah": 4405
+  },
+  {
+    "id": 29,
+    "number": 29,
+    "nameAr": "الجزء التاسع والعشرون",
+    "startAyah": 4406,
+    "endAyah": 4602
+  },
+  {
+    "id": 30,
+    "number": 30,
+    "nameAr": "الجزء الثلاثون",
+    "startAyah": 4603,
+    "endAyah": 6236
+  }
+]

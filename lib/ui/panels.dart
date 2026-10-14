@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../audio/ambient_mixer.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/palette.dart';
@@ -18,10 +20,17 @@ class SidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStateScope.of(context);
+    final isLight = s.themeMode == AppThemeMode.light;
+    final bg = isLight
+        ? const Color(0xFFF7F7FA)
+        : const Color(0xFF18181B);
+    final size = MediaQuery.sizeOf(context);
+    final panelWidth = math.min(372.0, size.width * 0.92);
     return liquid(
-      width: 372,
+      width: panelWidth,
       radius: 0,
-      tint: Colors.black.withValues(alpha: 0.35),
+      tint: bg,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
         child: switch (kind) {
@@ -113,7 +122,9 @@ class _SurahPanelState extends State<_SurahPanel> {
             ),
             isDense: true,
             filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.07),
+            fillColor: s.themeMode == AppThemeMode.light
+                ? Colors.black.withValues(alpha: 0.06)
+                : Colors.white.withValues(alpha: 0.07),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
@@ -231,8 +242,12 @@ class _ReciterPanel extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: r.id == s.reciterId
-                              ? s.themeMode.accent.withValues(alpha: 0.22)
-                              : Colors.white.withValues(alpha: 0.08),
+                              ? (s.themeMode.brightness == Brightness.light
+                                  ? const Color(0xFFF5E8CF)
+                                  : const Color(0xFF332A1C))
+                              : (s.themeMode.brightness == Brightness.light
+                                  ? const Color(0xFFE4E4E7)
+                                  : const Color(0xFF27272A)),
                         ),
                         child: Icon(
                           Icons.person_rounded,
@@ -289,58 +304,412 @@ class _ReciterPanel extends StatelessWidget {
 
 // --------------------------------------------------------------- ambient
 
-class _AmbientPanel extends StatelessWidget {
+class _AmbientPanel extends StatefulWidget {
   final VoidCallback onClose;
   const _AmbientPanel({required this.onClose});
+
+  @override
+  State<_AmbientPanel> createState() => _AmbientPanelState();
+}
+
+class _AmbientPanelState extends State<_AmbientPanel> {
+  String _selectedCategory = 'all';
 
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final mixer = s.mixer;
+
+    // Filter channels based on selected category
+    final channelIndices = <int>[];
+    for (var i = 0; i < mixer.channels.length; i++) {
+      if (_selectedCategory == 'all' ||
+          mixer.channels[i].category == _selectedCategory) {
+        channelIndices.add(i);
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PanelHeader(title: s.tr('ambient'), onClose: onClose),
-        Expanded(
-          child: ListView(
+        // Header with active counter and Mute All action
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
             children: [
-              for (var i = 0; i < mixer.channels.length; i++)
-                _AmbientRow(index: i),
-              const SizedBox(height: 10),
-              Divider(color: Colors.white.withValues(alpha: 0.12)),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Icon(
-                    Icons.volume_up_rounded,
-                    size: 18,
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(
+                      s.tr('ambient'),
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                        color: s.themeMode.ink,
+                      ),
+                    ),
+                    if (mixer.activeCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2.5,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: s.themeMode.accent.withValues(alpha: 0.18),
+                          border: Border.all(
+                            color: s.themeMode.accent.withValues(alpha: 0.35),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          '${mixer.activeCount} ${s.tr('activeSounds')}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: s.themeMode.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (mixer.activeCount > 0)
+                GlassButton(
+                  size: 34,
+                  tooltip: s.tr('muteAll'),
+                  icon: Icon(
+                    Icons.volume_off_rounded,
+                    size: 16,
                     color: s.themeMode.inkSoft,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      s.tr('masterVolume'),
+                  onTap: () {
+                    mixer.muteAll();
+                    s.saveAmbient();
+                  },
+                ),
+              if (mixer.activeCount > 0) const SizedBox(width: 6),
+              GlassButton(
+                size: 34,
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 17,
+                  color: s.themeMode.ink,
+                ),
+                onTap: widget.onClose,
+              ),
+            ],
+          ),
+        ),
+
+        // Master Volume Frosted Card
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white.withValues(alpha: 0.06),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.10),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  mixer.toggleMasterMute();
+                  s.saveAmbient();
+                },
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: mixer.master > 0
+                        ? s.themeMode.accent.withValues(alpha: 0.20)
+                        : Colors.white.withValues(alpha: 0.08),
+                  ),
+                  child: Icon(
+                    mixer.master == 0
+                        ? Icons.volume_off_rounded
+                        : (mixer.master < 0.5
+                            ? Icons.volume_down_rounded
+                            : Icons.volume_up_rounded),
+                    size: 17,
+                    color: mixer.master > 0
+                        ? s.themeMode.accent
+                        : s.themeMode.inkSoft,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          s.tr('masterVolume'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: s.themeMode.inkSoft,
+                          ),
+                        ),
+                        Text(
+                          '${(mixer.master * 100).round()}%',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: s.themeMode.ink,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 3.5,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                          elevation: 1,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 12,
+                        ),
+                        activeTrackColor: s.themeMode.accent,
+                        inactiveTrackColor: Colors.white.withValues(
+                          alpha: 0.12,
+                        ),
+                        thumbColor: s.themeMode.accent,
+                        overlayColor: s.themeMode.accent.withValues(
+                          alpha: 0.15,
+                        ),
+                      ),
+                      child: Slider(
+                        value: mixer.master,
+                        onChanged: (v) {
+                          mixer.setMaster(v);
+                          s.saveAmbient();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Sync with Quran Reciter (Vibe Mode toggle)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: mixer.syncWithReciter
+                ? s.themeMode.accent.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.04),
+            border: Border.all(
+              color: mixer.syncWithReciter
+                  ? s.themeMode.accent.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 0.8,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.sync_rounded,
+                size: 16,
+                color: mixer.syncWithReciter
+                    ? s.themeMode.accent
+                    : s.themeMode.inkSoft,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.tr('syncWithReciter'),
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: s.themeMode.ink,
+                      ),
+                    ),
+                    Text(
+                      s.tr('syncWithReciterDesc'),
+                      style: TextStyle(
+                        fontSize: 9.5,
                         color: s.themeMode.inkSoft,
                       ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 150,
-                    child: Slider(
-                      value: mixer.master,
-                      activeColor: s.themeMode.accent,
-                      inactiveColor: Colors.white.withValues(alpha: 0.15),
-                      onChanged: (v) {
-                        mixer.setMaster(v);
-                        s.saveAmbient();
-                      },
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+              Transform.scale(
+                scale: 0.72,
+                child: Switch.adaptive(
+                  value: mixer.syncWithReciter,
+                  activeThumbColor: s.themeMode.accent,
+                  onChanged: (v) => s.setSyncAmbientWithReciter(v),
+                ),
               ),
             ],
+          ),
+        ),
+
+        // Soundscapes (Curated Mixes) Section
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 13,
+                color: s.themeMode.accent,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                s.tr('soundscapes'),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                  color: s.themeMode.inkSoft,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        SizedBox(
+          height: 33,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: kAmbientPresets.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 6),
+            itemBuilder: (context, i) {
+              final p = kAmbientPresets[i];
+              final isSelected = mixer.isPresetActive(p);
+              return GestureDetector(
+                onTap: () {
+                  mixer.applyPreset(p);
+                  s.saveAmbient();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: isSelected
+                        ? s.themeMode.accent.withValues(alpha: 0.24)
+                        : Colors.white.withValues(alpha: 0.07),
+                    border: Border.all(
+                      color: isSelected
+                          ? s.themeMode.accent
+                          : Colors.white.withValues(alpha: 0.12),
+                      width: isSelected ? 1.2 : 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        p.icon,
+                        size: 13,
+                        color: isSelected
+                            ? s.themeMode.accent
+                            : s.themeMode.inkSoft,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        s.ar ? p.ar : p.en,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? s.themeMode.ink
+                              : s.themeMode.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        // Category Filter Chips
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              for (final cat in [
+                ('all', 'allCategory'),
+                ('water', 'waterCategory'),
+                ('nature', 'natureCategory'),
+                ('sky', 'skyCategory'),
+              ]) ...[
+                GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = cat.$1),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 3.5,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: _selectedCategory == cat.$1
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : Colors.transparent,
+                    ),
+                    child: Text(
+                      s.tr(cat.$2),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _selectedCategory == cat.$1
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                        color: _selectedCategory == cat.$1
+                            ? s.themeMode.ink
+                            : s.themeMode.inkSoft,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ],
+          ),
+        ),
+
+        // Channel Cards List
+        Expanded(
+          child: ListView.builder(
+            physics: const BouncingScrollPhysics(),
+            itemCount: channelIndices.length,
+            itemBuilder: (context, i) {
+              return _AmbientSoundCard(index: channelIndices[i]);
+            },
           ),
         ),
       ],
@@ -348,60 +717,320 @@ class _AmbientPanel extends StatelessWidget {
   }
 }
 
-class _AmbientRow extends StatelessWidget {
+class _AmbientSoundCard extends StatelessWidget {
   final int index;
-  const _AmbientRow({required this.index});
+  const _AmbientSoundCard({required this.index});
 
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final mixer = s.mixer;
     final c = mixer.channels[index];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          GlassButton(
-            size: 40,
-            color: c.on
-                ? s.themeMode.accent.withValues(alpha: 0.28)
-                : Colors.white.withValues(alpha: 0.08),
-            icon: Icon(
-              c.icon,
-              size: 19,
-              color: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
-            ),
-            onTap: () {
-              mixer.toggle(index);
-              s.saveAmbient();
-            },
+
+    final isLight = s.themeMode.brightness == Brightness.light;
+    final activeBg = isLight ? const Color(0xFFFBF4E6) : const Color(0xFF262118);
+    final inactiveBg = isLight ? Colors.white : const Color(0xFF222226);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.fromLTRB(11, 8, 11, 7),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        color: c.on ? activeBg : inactiveBg,
+        border: Border.all(
+          color: c.on
+              ? s.themeMode.accent
+              : (isLight ? const Color(0xFFE4E4E7) : const Color(0xFF2E2E33)),
+          width: c.on ? 1.1 : 0.8,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isLight ? const Color(0x08000000) : const Color(0x22000000),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.ar ? c.ar : c.en,
+        ],
+      ),
+      child: Column(
+        children: [
+          // Top Row: Icon, Title & Category, Equalizer Wave, Toggle
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  mixer.toggle(index);
+                  s.saveAmbient();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.on
+                        ? (isLight ? const Color(0xFFF5E8CF) : const Color(0xFF332A1C))
+                        : (isLight ? const Color(0xFFF4F4F5) : const Color(0xFF2A2A30)),
+                  ),
+                  child: Icon(
+                    c.icon,
+                    size: 17,
+                    color: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    mixer.toggle(index);
+                    s.saveAmbient();
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.ar ? c.ar : c.en,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: c.on ? FontWeight.w700 : FontWeight.w600,
+                          color: c.on
+                              ? s.themeMode.ink
+                              : s.themeMode.ink.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      Text(
+                        s.tr('${c.category}Category'),
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: s.themeMode.inkSoft.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (c.on) ...[
+                _MiniEqualizer(
+                  playing: c.on && mixer.master > 0,
+                  color: s.themeMode.accent,
+                ),
+                const SizedBox(width: 8),
+              ],
+              _GlassToggle(
+                active: c.on,
+                accentColor: s.themeMode.accent,
+                onTap: () {
+                  mixer.toggle(index);
+                  s.saveAmbient();
+                },
+              ),
+            ],
+          ),
+
+          // Bottom Row: Slider and Level Percentage
+          Row(
+            children: [
+              Icon(
+                c.volume == 0
+                    ? Icons.volume_off_rounded
+                    : (c.volume < 0.5
+                        ? Icons.volume_down_rounded
+                        : Icons.volume_up_rounded),
+                size: 14,
+                color: c.on
+                    ? s.themeMode.accent.withValues(alpha: 0.85)
+                    : s.themeMode.inkSoft.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 2.8,
+                    thumbShape: RoundSliderThumbShape(
+                      enabledThumbRadius: c.on ? 5.5 : 4.5,
+                      elevation: 1,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 10,
+                    ),
+                    activeTrackColor: c.on
+                        ? s.themeMode.accent
+                        : Colors.white.withValues(alpha: 0.25),
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.10),
+                    thumbColor: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
+                    overlayColor: s.themeMode.accent.withValues(alpha: 0.15),
+                  ),
+                  child: Slider(
+                    value: c.volume,
+                    onChanged: (v) {
+                      mixer.setVolume(index, v);
+                      s.saveAmbient();
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '${(c.volume * 100).round()}%',
+                  textAlign: TextAlign.end,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                     color: c.on
                         ? s.themeMode.ink
-                        : s.themeMode.ink.withValues(alpha: 0.55),
+                        : s.themeMode.inkSoft.withValues(alpha: 0.5),
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
-                Slider(
-                  value: c.volume,
-                  onChanged: (v) {
-                    mixer.setVolume(index, v);
-                    s.saveAmbient();
-                  },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlassToggle extends StatelessWidget {
+  final bool active;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  const _GlassToggle({
+    required this.active,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 36,
+        height: 20,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: active
+              ? accentColor
+              : (isLight ? const Color(0xFFD4D4D8) : const Color(0xFF2E2E33)),
+          border: Border.all(
+            color: active
+                ? accentColor
+                : (isLight ? const Color(0xFFC4C4C8) : const Color(0xFF38383E)),
+            width: 1,
+          ),
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          alignment: active
+              ? AlignmentDirectional.centerEnd
+              : AlignmentDirectional.centerStart,
+          child: Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? (isLight ? Colors.white : const Color(0xFF1B1B1D))
+                  : Colors.white,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniEqualizer extends StatefulWidget {
+  final bool playing;
+  final Color color;
+  const _MiniEqualizer({required this.playing, required this.color});
+
+  @override
+  State<_MiniEqualizer> createState() => _MiniEqualizerState();
+}
+
+class _MiniEqualizerState extends State<_MiniEqualizer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+    if (widget.playing) _ctrl.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MiniEqualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.playing && !_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    } else if (!widget.playing && _ctrl.isAnimating) {
+      _ctrl.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = widget.playing ? _ctrl.value : 0.0;
+        final h1 = 3.5 + (widget.playing ? t * 7.5 : 0.0);
+        final h2 = 3.5 + (widget.playing ? (1.0 - t) * 9.0 : 0.0);
+        final h3 = 3.5 + (widget.playing ? math.sin(t * math.pi) * 8.0 : 0.0);
+
+        return SizedBox(
+          width: 14,
+          height: 14,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _bar(h1),
+              _bar(h2),
+              _bar(h3),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _bar(double h) {
+    return Container(
+      width: 2.6,
+      height: h.clamp(3.0, 14.0),
+      decoration: BoxDecoration(
+        color: widget.color,
+        borderRadius: BorderRadius.circular(1.3),
       ),
     );
   }
@@ -452,7 +1081,7 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                     ('ar', 'العربية'),
                   ])
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsetsDirectional.only(end: 8),
                       child: ChoiceChip(
                         selected: s.locale.languageCode == code,
                         selectedColor: mode.accent.withValues(alpha: 0.3),
@@ -461,46 +1090,6 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                           style: TextStyle(fontSize: 13, color: mode.ink),
                         ),
                         onSelected: (_) => s.setLocale(Locale(code)),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _SectionLabel(s.tr('appearance')),
-              Row(
-                children: [
-                  for (final t in AppThemeMode.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: Tooltip(
-                        message: t.label,
-                        child: GestureDetector(
-                          onTap: () => s.setTheme(t),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: t.scrim,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: t == mode
-                                    ? mode.accent
-                                    : Colors.white.withValues(alpha: 0.2),
-                                width: t == mode ? 2.4 : 1.2,
-                              ),
-                            ),
-                            child: Icon(
-                              t == AppThemeMode.light
-                                  ? Icons.light_mode_rounded
-                                  : t == AppThemeMode.dark
-                                  ? Icons.dark_mode_rounded
-                                  : Icons.auto_awesome_rounded,
-                              size: 18,
-                              color: t == mode ? mode.accent : Colors.white70,
-                            ),
-                          ),
-                        ),
                       ),
                     ),
                 ],
@@ -516,46 +1105,12 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                 childAspectRatio: 1.35,
                 children: [
                   for (var i = 0; i < kWatchfaces.length; i++)
-                    GestureDetector(
+                    _WatchfaceTile(
+                      watchface: kWatchfaces[i],
+                      isSelected: i == s.watchface,
                       onTap: () => s.setWatchface(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: i == s.watchface
-                                ? mode.accent
-                                : Colors.white.withValues(alpha: 0.15),
-                            width: i == s.watchface ? 2.2 : 1,
-                          ),
-                          image: kWatchfaces[i].asset != null
-                              ? DecorationImage(
-                                  image: AssetImage(kWatchfaces[i].asset!),
-                                  fit: BoxFit.cover,
-                                  colorFilter: ColorFilter.mode(
-                                    Colors.black.withValues(alpha: 0.25),
-                                    BlendMode.darken,
-                                  ),
-                                )
-                              : null,
-                          color: kWatchfaces[i].asset == null
-                              ? (i == 0 ? const Color(0xFFEDEDED) : null)
-                              : null,
-                        ),
-                        child: kWatchfaces[i].asset == null
-                            ? Center(
-                                child: Text(
-                                  'Plain',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: i == 0
-                                        ? Colors.black54
-                                        : mode.inkSoft,
-                                  ),
-                                ),
-                              )
-                            : null,
-                      ),
+                      isAr: s.ar,
+                      accent: mode.accent,
                     ),
                 ],
               ),
@@ -569,6 +1124,40 @@ class _SettingsPanelState extends State<_SettingsPanel> {
                   style: TextStyle(fontSize: 14, color: mode.ink),
                 ),
                 onChanged: (_) => s.toggleTranslation(),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: s.autoAdvance,
+                activeThumbColor: mode.accent,
+                title: Text(
+                  s.tr('autoAdvance'),
+                  style: TextStyle(fontSize: 14, color: mode.ink),
+                ),
+                onChanged: (_) => s.toggleAutoAdvance(),
+              ),
+              const SizedBox(height: 18),
+              _SectionLabel(s.tr('arabicScale')),
+              Row(
+                children: [
+                  for (final (scale, label) in const [
+                    (0.9, 'Small'),
+                    (1.0, 'Normal'),
+                    (1.18, 'Large'),
+                    (1.32, 'Extra'),
+                  ])
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: ChoiceChip(
+                        selected: (s.arabicTextScale - scale).abs() < 0.06,
+                        selectedColor: mode.accent.withValues(alpha: 0.3),
+                        label: Text(
+                          label,
+                          style: TextStyle(fontSize: 12, color: mode.ink),
+                        ),
+                        onSelected: (_) => s.setArabicTextScale(scale),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 18),
               _SectionLabel(s.tr('credits')),
@@ -639,22 +1228,28 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: child,
+    );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: selected
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.transparent,
-          ),
-          child: child,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: selected
+              ? liquid(
+                  radius: 16,
+                  tint: isLight
+                      ? const Color(0xFFE4E4E7)
+                      : const Color(0xFF27272A),
+                  child: content,
+                )
+              : content,
         ),
       ),
     );
@@ -676,20 +1271,174 @@ class _NumberBadge extends StatelessWidget {
     return Container(
       width: 34,
       height: 34,
-      alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: accent.withValues(alpha: 0.55)),
+        color: accent.withValues(alpha: 0.16),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.35),
+          width: 1,
+        ),
       ),
-      child: Text(
-        '$n',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: ink.withValues(alpha: 0.85),
-          fontFeatures: const [FontFeature.tabularFigures()],
+      child: Center(
+        child: Text(
+          '$n',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: ink.withValues(alpha: 0.90),
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );
   }
 }
+
+class _WatchfaceTile extends StatelessWidget {
+  final Watchface watchface;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final bool isAr;
+  final Color accent;
+
+  const _WatchfaceTile({
+    required this.watchface,
+    required this.isSelected,
+    required this.onTap,
+    required this.isAr,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = watchface.name(isAr);
+
+    Widget content;
+    Color? tileBg;
+    Border border;
+
+    if (watchface.isWhite) {
+      tileBg = const Color(0xFFFAFAFA);
+      border = Border.all(
+        color: isSelected ? accent : const Color(0xFFD4D4D8),
+        width: isSelected ? 2.2 : 1.0,
+      );
+      content = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.light_mode_rounded,
+            size: 20,
+            color: isSelected ? accent : const Color(0xFF1E1E22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isSelected ? accent : const Color(0xFF1E1E22),
+            ),
+          ),
+        ],
+      );
+    } else if (watchface.isBlack) {
+      tileBg = const Color(0xFF0F0F12);
+      border = Border.all(
+        color: isSelected ? accent : const Color(0xFF333338),
+        width: isSelected ? 2.2 : 1.0,
+      );
+      content = Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.dark_mode_rounded,
+            size: 20,
+            color: isSelected ? accent : Colors.white,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isSelected ? accent : Colors.white,
+            ),
+          ),
+        ],
+      );
+    } else {
+      border = Border.all(
+        color: isSelected ? accent : Colors.white.withValues(alpha: 0.18),
+        width: isSelected ? 2.2 : 1.0,
+      );
+      content = Stack(
+        fit: StackFit.expand,
+        children: [
+          if (watchface.asset != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: Image.asset(
+                watchface.asset!,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(13),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x10000000), Color(0x99000000)],
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 6,
+            left: 4,
+            right: 4,
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? accent : Colors.white,
+                shadows: const [
+                  Shadow(color: Colors.black, blurRadius: 4),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: tileBg,
+          borderRadius: BorderRadius.circular(14),
+          border: border,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: content,
+      ),
+    );
+  }
+}
+

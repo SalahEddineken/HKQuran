@@ -1,23 +1,16 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
-/// Shared liquid-glass tuning for every surface in Noor.
-///
-/// Hand-built glass: a backdrop blur, a frosted tint with one calm diagonal
-/// reflection, a hairline light border and a soft drop shadow. Every surface
-/// hugs its child exactly and centers it, so each widget reads as one clean
-/// glass object (the packaged LiquidGlassEffect stretched its internal Stack
-/// to fill the parent, which broke sizing, centering and hit-testing).
-const double kGlassBlur = 22;
+import '../state/app_state.dart';
+import '../theme/palette.dart';
 
-/// A glass region. Surfaces are self-contained (each carries its own backdrop
-/// blur), so this stays as a semantic pass-through so existing call sites
-/// keep working.
+/// Legacy blur constant kept for compatibility with callers.
+const double kGlassBlur = 0.0;
+
+/// Simple pass-through group (legacy compatibility).
 Widget glassGroup({required Widget child}) => child;
 
-/// Liquid-glass surface helper — every chrome element in Noor is built with
-/// this so the whole UI shares one glass language.
+/// Modern solid surface helper providing a clean, high-performance card container
+/// with solid backgrounds, crisp borders, and subtle elevation — zero glass or blur effects.
 Widget liquid({
   required Widget child,
   double radius = 24,
@@ -26,68 +19,104 @@ Widget liquid({
   Color? tint,
   EdgeInsetsGeometry? padding,
   bool enabled = true,
+  Brightness? brightness,
+  double? blur,
+  bool touchFlex = true,
+  dynamic refractionIndex,
+  dynamic refractionWidth,
+  dynamic specular,
+  dynamic glow,
+  dynamic shadow,
 }) {
-  Widget content = child;
-  if (padding != null) content = Padding(padding: padding, child: content);
-
-  final base = tint ?? Colors.white.withValues(alpha: 0.10);
-  final shape = BorderRadius.circular(radius);
-
-  // Frosted surface: soft white sheen sweeping diagonally over the tint.
-  final surface = Container(
-    decoration: BoxDecoration(
-      borderRadius: shape,
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withValues(alpha: 0.20),
-          base,
-          Colors.white.withValues(alpha: 0.05),
-          Color.alphaBlend(Colors.white.withValues(alpha: 0.06), base),
-        ],
-        stops: const [0.0, 0.38, 0.72, 1.0],
-      ),
-      border: Border.all(
-        color: Colors.white.withValues(alpha: 0.28),
-        width: 0.8,
-      ),
-    ),
-    child: content,
-  );
-
-  final Widget glass = enabled
-      ? BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: kGlassBlur, sigmaY: kGlassBlur),
-          child: surface,
-        )
-      : Container(
-          decoration: BoxDecoration(borderRadius: shape, color: base),
-          child: content,
-        );
-
-  // Drop shadow lives on the outer container so the clip never cuts it.
-  return Container(
+  return _SolidSurface(
+    radius: radius,
     width: width,
     height: height,
-    decoration: BoxDecoration(
-      borderRadius: shape,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.18),
-          blurRadius: 18,
-          offset: const Offset(0, 8),
-          spreadRadius: -6,
-        ),
-      ],
-    ),
-    child: ClipRRect(borderRadius: shape, child: glass),
+    tint: tint,
+    padding: padding,
+    enabled: enabled,
+    brightness: brightness,
+    child: child,
   );
 }
 
-/// Round glass button used across the chrome. Presses squish slightly for
-/// a tactile liquid feel; the scale lives in its own repaint layer so the
-/// backdrop blur never re-renders on interaction.
+class _SolidSurface extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final double? width;
+  final double? height;
+  final Color? tint;
+  final EdgeInsetsGeometry? padding;
+  final bool enabled;
+  final Brightness? brightness;
+
+  const _SolidSurface({
+    required this.child,
+    required this.radius,
+    this.width,
+    this.height,
+    this.tint,
+    this.padding,
+    required this.enabled,
+    this.brightness,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget content = child;
+    if (padding != null) content = Padding(padding: padding!, child: content);
+
+    final br = brightness ??
+        AppState.current?.themeMode.brightness ??
+        Theme.of(context).brightness;
+    final isLight = br == Brightness.light;
+
+    if (!enabled) {
+      final shape = BorderRadius.circular(radius);
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          color: tint ?? Colors.transparent,
+        ),
+        child: content,
+      );
+    }
+
+    // 100% solid surfaces - no translucency or faux glass
+    final defaultBg = isLight ? Colors.white : const Color(0xFF1E1E22);
+
+    final borderColor = isLight
+        ? const Color(0xFFE4E4E7)
+        : const Color(0xFF2E2E33);
+
+    final decoration = BoxDecoration(
+      borderRadius: radius > 0 ? BorderRadius.circular(radius) : BorderRadius.zero,
+      color: tint ?? defaultBg,
+      border: Border.all(color: borderColor, width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: isLight
+              ? const Color(0x0D000000)
+              : const Color(0x33000000),
+          blurRadius: 4,
+          offset: const Offset(0, 1.5),
+        ),
+      ],
+    );
+
+    return Container(
+      width: width,
+      height: height,
+      decoration: decoration,
+      child: content,
+    );
+  }
+}
+
+/// Solid, high-performance button used across the app chrome.
+/// Features clean solid styling, crisp border, and instant non-delayed tap feedback.
 class GlassButton extends StatefulWidget {
   final Widget icon;
   final VoidCallback? onTap;
@@ -113,30 +142,61 @@ class _GlassButtonState extends State<GlassButton> {
 
   @override
   Widget build(BuildContext context) {
-    final btn = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: widget.onTap,
-        onHighlightChanged: (v) {
-          if (_pressed != v) setState(() => _pressed = v);
+    final br = AppState.current?.themeMode.brightness ??
+        Theme.of(context).brightness;
+    final isLight = br == Brightness.light;
+
+    final defaultColor = isLight ? Colors.white : const Color(0xFF222226);
+
+    final borderColor = isLight
+        ? const Color(0xFFE4E4E7)
+        : const Color(0xFF333338);
+
+    final btn = Semantics(
+      button: true,
+      enabled: widget.onTap != null,
+      label: widget.tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) {
+          if (mounted) setState(() => _pressed = true);
+        },
+        onTapUp: (_) {
+          if (mounted) setState(() => _pressed = false);
+          widget.onTap?.call();
+        },
+        onTapCancel: () {
+          if (mounted) setState(() => _pressed = false);
         },
         child: RepaintBoundary(
           child: AnimatedScale(
-            scale: _pressed ? 0.90 : 1.0,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
-            child: liquid(
-              radius: widget.size / 2,
+            scale: _pressed ? 0.94 : 1.0,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOutQuad,
+            child: Container(
               width: widget.size,
               height: widget.size,
-              tint: widget.color ?? Colors.white.withValues(alpha: 0.12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: widget.color ?? defaultColor,
+                border: Border.all(color: borderColor, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: isLight
+                        ? const Color(0x0A000000)
+                        : const Color(0x28000000),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
               child: Center(child: widget.icon),
             ),
           ),
         ),
       ),
     );
+
     if (widget.tooltip == null) return btn;
     return Tooltip(message: widget.tooltip!, child: btn);
   }

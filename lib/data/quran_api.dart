@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:http/http.dart' as http;
-
+import 'firebase_quran_service.dart';
+import 'local_quran_data.dart';
 import 'models.dart';
 
 class ApiException implements Exception {
@@ -11,121 +15,141 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// quran.com v4 — chapter audio (single file per surah) with per-word
-/// timestamps, plus Uthmani word text and a translation for the same chapter.
-/// Verified: `Access-Control-Allow-Origin: *`, no auth required.
+/// Comprehensive Quran database repository powered by gaitco/quran-database.
+/// Delivers verified Tanzil Uthmani text, Saheeh International translations,
+/// King Fahad Complex Tafsir Muyassar, Juzs, and karaoke word timings.
 class QuranApi {
-  static const _base = 'https://api.quran.com/api/v4';
-  static const translationId = 20; // Saheeh International
+  QuranApi({this.prefs});
 
-  static Future<dynamic> _get(String url, {int tries = 3}) async {
-    Object? last;
-    for (var i = 0; i < tries; i++) {
-      try {
-        final res = await http
-            .get(Uri.parse(url))
-            .timeout(const Duration(seconds: 25));
-        if (res.statusCode == 200) {
-          return jsonDecode(utf8.decode(res.bodyBytes));
-        }
-        last = ApiException('HTTP ${res.statusCode}');
-      } catch (e) {
-        last = e;
-        await Future<void>.delayed(Duration(milliseconds: 500 * (i + 1)));
-      }
+  final SharedPreferences? prefs;
+
+  /// Global in-memory cache of loaded surahs for instant synchronous retrieval.
+  static final Map<int, List<Verse>> _versesCache = {};
+  static final Map<String, ChapterAudio> _audioCache = {};
+  static List<JuzMeta>? _juzsCache;
+
+  /// Instant synchronous cache check
+  ChapterAudio? getCachedAudio(int reciterId, int chapter) {
+    final key = '$reciterId:$chapter';
+    if (_audioCache.containsKey(key)) {
+      return _audioCache[key];
     }
-    throw ApiException(
-      'Could not reach quran.com (${last is ApiException ? last.message : last})',
-    );
+    if (kLocalChapterAudio.containsKey(key)) {
+      return kLocalChapterAudio[key];
+    }
+    return null;
   }
 
+  /// Instant synchronous cache check
+  List<Verse>? getCachedVerses(int chapter) {
+    if (_versesCache.containsKey(chapter)) {
+      return _versesCache[chapter];
+    }
+    if (kLocalSurahVerses.containsKey(chapter)) {
+      return kLocalSurahVerses[chapter];
+    }
+    return null;
+  }
+
+  bool hasCachedAudio(int reciterId, int chapter) =>
+      _audioCache.containsKey('$reciterId:$chapter') ||
+      kLocalChapterAudio.containsKey('$reciterId:$chapter');
+
+  bool hasCachedVerses(int chapter) =>
+      _versesCache.containsKey(chapter) || hasStarterVerses(chapter);
+
+  /// Returns chapter audio and follow-up (karaoke timings)
   Future<ChapterAudio> fetchAudio(int reciterId, int chapter) async {
-    final url =
-        '$_base/chapter_recitations/$reciterId?chapter_number=$chapter&segments=true';
-    final json = await _get(url) as Map<String, dynamic>;
-    final files = (json['audio_files'] as List?) ?? const [];
-    if (files.isEmpty) throw ApiException('No audio for this reciter/surah');
-    final file = files.first as Map<String, dynamic>;
-    final timings = <VerseTiming>[];
-    for (final t in (file['timestamps'] as List?) ?? const []) {
-      final m = t as Map<String, dynamic>;
-      final segs = <WordSegment>[];
-      for (final s in (m['segments'] as List?) ?? const []) {
-        final l = s as List;
-        if (l.length >= 3) {
-          segs.add(
-            WordSegment(
-              (l[0] as num).toInt(),
-              (l[1] as num).toInt(),
-              (l[2] as num).toInt(),
-            ),
-          );
-        }
-      }
-      timings.add(
-        VerseTiming(
-          key: m['verse_key'] as String,
-          from: (m['timestamp_from'] as num).toInt(),
-          to: (m['timestamp_to'] as num).toInt(),
-          segments: segs,
-        ),
-      );
+    final key = '$reciterId:$chapter';
+    if (_audioCache.containsKey(key)) {
+      return _audioCache[key]!;
     }
-    if (timings.isEmpty) throw ApiException('No timing data for this surah');
-    return ChapterAudio(
-      reciterId: reciterId,
-      chapter: chapter,
-      url: file['audio_url'] as String,
-      timings: timings,
-    );
+    if (kLocalChapterAudio.containsKey(key)) {
+      final a = kLocalChapterAudio[key]!;
+      _audioCache[key] = a;
+      return a;
+    }
+
+    // Load word-by-word timings from bundled assets/quran/timings/${reciterId}_$chapter.json
+    try {
+      final jsonStr = await rootBundle
+          .loadString('assets/quran/timings/${reciterId}_$chapter.json');
+      final decoded = jsonDecode(jsonStr);
+      final audioObj = ChapterAudio.fromJson(
+        Map<String, dynamic>.from(decoded as Map),
+      );
+      if (audioObj.timings.isNotEmpty) {
+        _audioCache[key] = audioObj;
+        return audioObj;
+      }
+    } catch (e) {
+      debugPrint('Timing asset load note for $key: $e');
+    }
+
+    // Fallback: estimate intervals from real verses
+    final verses = await fetchVerses(chapter);
+    final fallbackAudio = getLocalChapterAudio(reciterId, chapter, verses);
+    _audioCache[key] = fallbackAudio;
+    return fallbackAudio;
   }
 
+  /// Returns surah verses and words directly from bundled assets / Firebase
   Future<List<Verse>> fetchVerses(int chapter) async {
-    final verses = <Verse>[];
-    var page = 1;
-    var totalPages = 1;
-    do {
-      final url =
-          '$_base/verses/by_chapter/$chapter'
-          '?fields=text_uthmani&words=true&word_fields=text_uthmani,translation'
-          '&translations=$translationId&per_page=50&page=$page';
-      final json = await _get(url) as Map<String, dynamic>;
-      final pag = json['pagination'] as Map<String, dynamic>? ?? const {};
-      totalPages = (pag['total_pages'] as num?)?.toInt() ?? 1;
-      for (final v in json['verses'] as List) {
-        final m = v as Map<String, dynamic>;
-        final words = <AyahWord>[];
-        for (final w in (m['words'] as List?) ?? const []) {
-          final wm = w as Map<String, dynamic>;
-          if (wm['char_type_name'] != 'word') continue;
-          final gloss =
-              ((wm['translation'] as Map<String, dynamic>?)?['text']
-                  as String?);
-          words.add(
-            AyahWord(
-              (wm['position'] as num).toInt(),
-              (wm['text_uthmani'] ?? wm['text']) as String,
-              gloss,
-            ),
-          );
-        }
-        words.sort((a, b) => a.position.compareTo(b.position));
-        final trans = (m['translations'] as List?) ?? const [];
-        verses.add(
-          Verse(
-            key: m['verse_key'] as String,
-            number: (m['verse_number'] as num).toInt(),
-            text: (m['text_uthmani'] ?? '') as String,
-            translation: trans.isNotEmpty
-                ? ((trans.first as Map<String, dynamic>)['text'] ?? '')
-                      as String
-                : '',
-            words: words,
-          ),
-        );
-      }
-      page++;
-    } while (page <= totalPages);
+    if (_versesCache.containsKey(chapter)) {
+      return _versesCache[chapter]!;
+    }
+    if (kLocalSurahVerses.containsKey(chapter)) {
+      final v = kLocalSurahVerses[chapter]!;
+      _versesCache[chapter] = v;
+      return v;
+    }
+
+    final verses = await FirebaseQuranService.instance.getSurah(chapter);
+    if (verses.isNotEmpty) {
+      _versesCache[chapter] = verses;
+    }
     return verses;
   }
+
+  /// Loads all 30 Juz boundaries and metadata from Firebase
+  Future<List<JuzMeta>> fetchJuzs() async {
+    if (_juzsCache != null && _juzsCache!.isNotEmpty) return _juzsCache!;
+    final juzs = await FirebaseQuranService.instance.getJuzs();
+    if (juzs.isNotEmpty) {
+      _juzsCache = juzs;
+    }
+    return _juzsCache ?? const [];
+  }
+
+  /// Proactive background prefetch for upcoming surahs
+  void prefetchSurah(int reciterId, int chapter) {
+    if (chapter >= 1 && chapter <= 114) {
+      unawaited(fetchVerses(chapter));
+    }
+  }
+
+  void prefetchAudio(int reciterId, int chapter) {
+    if (chapter >= 1 && chapter <= 114) {
+      unawaited(fetchAudio(reciterId, chapter));
+    }
+  }
+
+  /// Search across loaded surahs for a query in Arabic or English
+  List<Verse> searchCached(String query) {
+    if (query.trim().isEmpty) return const [];
+    final q = query.trim().toLowerCase();
+    final results = <Verse>[];
+    for (final vList in _versesCache.values) {
+      for (final v in vList) {
+        if (v.text.contains(query) ||
+            v.translation.toLowerCase().contains(q) ||
+            (v.tafsir != null && v.tafsir!.contains(query))) {
+          results.add(v);
+        }
+      }
+    }
+    return results;
+  }
+
+  void dispose() {}
 }

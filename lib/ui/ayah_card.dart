@@ -4,11 +4,9 @@ import 'package:flutter/material.dart';
 import '../audio/chapter_player.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
-import 'glass.dart';
 
 /// The karaoke ayah card: the current ayah large with the recited word
-/// highlighted, plus an optional translation — all on one liquid-glass
-/// surface, everything centered.
+/// highlighted, plus an optional translation — all cleanly centered.
 class AyahCard extends StatelessWidget {
   final bool compact;
   const AyahCard({super.key, this.compact = false});
@@ -19,32 +17,42 @@ class AyahCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final player = s.player;
-    final cardWidth = (MediaQuery.sizeOf(context).width * (compact ? 0.94 : 0.86))
-        .clamp(280.0, 900.0);
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isSmall = screenW < 600;
+    final cardWidth = (screenW * (compact ? 0.96 : (isSmall ? 0.92 : 0.86)))
+        .clamp(260.0, 900.0);
 
-    return switch (player.status) {
-      PlayerStatus.idle ||
-      PlayerStatus.loading => _shell(context, cardWidth, child: _loading(s)),
-      PlayerStatus.error => _shell(
+    if (player.verses.isNotEmpty) {
+      return _shell(
         context,
+        s,
         cardWidth,
-        child: _error(context, s, player),
-      ),
-      PlayerStatus.ready => _shell(
-        context,
-        cardWidth,
-        child: _verse(context, s, player),
-      ),
-    };
+        child: ListenableBuilder(
+          listenable: player,
+          builder: (context, _) => _verse(context, s, player),
+        ),
+      );
+    }
+
+    if (player.status == PlayerStatus.error) {
+      return _shell(context, s, cardWidth, child: _error(context, s, player));
+    }
+
+    return _shell(context, s, cardWidth, child: _loading(s));
   }
 
-  Widget _shell(BuildContext context, double w, {required Widget child}) {
-    return liquid(
+  Widget _shell(BuildContext context, AppState s, double w, {required Widget child}) {
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isSmall = screenW < 600;
+    return SizedBox(
       width: w,
-      radius: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 26),
-      tint: Colors.white.withValues(alpha: 0.07),
-      child: child,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: isSmall ? 12 : 24,
+          vertical: isSmall ? 8 : 16,
+        ),
+        child: child,
+      ),
     );
   }
 
@@ -98,7 +106,6 @@ class AyahCard extends StatelessWidget {
     ChapterPlayer player,
   ) {
     final mode = s.themeMode;
-    final meta = kSurahs[s.chapter - 1];
     final verses = player.verses;
     final idx = player.currentVerse.clamp(0, verses.length - 1);
     final verse = verses[idx];
@@ -106,44 +113,56 @@ class AyahCard extends StatelessWidget {
     final active = playing ? player.currentWord : null;
 
     final wordCount = verse.words.length;
-    final arabicSize = wordCount > 18
-        ? 24.0
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isSmall = screenWidth < 600;
+    final isTiny = screenWidth < 380;
+    final scale = isTiny ? 0.72 : (isSmall ? 0.82 : 1.0);
+
+    final baseArabicSize = (wordCount > 18
+        ? 22.0
         : wordCount > 12
-        ? 27.0
-        : 31.0;
+        ? 25.0
+        : 29.0) * scale;
+    final arabicSize = baseArabicSize * s.arabicTextScale;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // header
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.menu_book_rounded, size: 15, color: mode.accent),
-            const SizedBox(width: 8),
-            Text(
-              s.ar ? meta.arShort : meta.en,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.6,
-                color: mode.ink.withValues(alpha: 0.85),
-              ),
-            ),
-            Text(
-              '  •  ${idx + 1} / ${meta.ayahs}',
-              style: TextStyle(fontSize: 13, color: mode.inkSoft),
-            ),
-            if (playing) ...[
-              const SizedBox(width: 10),
-              _LiveDot(color: mode.accent),
-            ],
-          ],
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: (idx == 0 && s.chapter != 1 && s.chapter != 9)
+              ? Padding(
+                  key: ValueKey('bismillah_${s.chapter}'),
+                  padding: EdgeInsets.only(bottom: isSmall ? 10 : 16),
+                  child: Text(
+                    'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ',
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.rtl,
+                    style: TextStyle(
+                      fontFamily: _quranFont,
+                      fontSize: (isSmall ? 18.0 : 22.0) * s.arabicTextScale,
+                      height: 1.6,
+                      fontWeight: FontWeight.w400,
+                      color: kWatchfaces[s.watchface].isImage
+                          ? Colors.white.withValues(alpha: 0.92)
+                          : mode.ink.withValues(alpha: 0.70),
+                      shadows: kWatchfaces[s.watchface].isImage
+                          ? const [
+                              Shadow(
+                                color: Colors.black87,
+                                blurRadius: 16,
+                                offset: Offset(0, 2),
+                              ),
+                            ]
+                          : null,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey('empty_bismillah')),
         ),
-        const SizedBox(height: 20),
 
         // current ayah — word by word. Isolated so the per-word highlight
-        // repaints only this layer, never the glass backdrop. The key swaps
+        // repaints only this layer, never the backdrop. The key swaps
         // on verse change so each verse slides in softly.
         GestureDetector(
           onTap: () => player.seekToVerse(idx),
@@ -173,18 +192,20 @@ class AyahCard extends StatelessWidget {
                   alignment: WrapAlignment.center,
                   runAlignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 14,
+                  spacing: isSmall ? 6 : 10,
+                  runSpacing: isSmall ? 8 : 14,
                   children: [
                     for (var i = 0; i < verse.words.length; i++)
                       _Word(
-                        text: verse.words[i].text,
+                        word: verse.words[i],
+                        totalWords: verse.words.length,
                         size: arabicSize,
                         active: active == i,
                         read: active != null && i < active,
                         dim: active != null && i > active,
                         mode: s.themeMode,
                         playing: playing,
+                        isImage: kWatchfaces[s.watchface].isImage,
                       ),
                   ],
                 ),
@@ -194,17 +215,28 @@ class AyahCard extends StatelessWidget {
         ),
 
         if (s.showTranslation && verse.translation.isNotEmpty) ...[
-          const SizedBox(height: 20),
+          SizedBox(height: isSmall ? 12 : 20),
           Container(
             constraints: const BoxConstraints(maxWidth: 720),
             child: Text(
               _stripHtml(verse.translation),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 15.5,
-                height: 1.5,
+                fontSize: isSmall ? 13.0 : 15.5,
+                height: isSmall ? 1.4 : 1.5,
                 fontStyle: FontStyle.italic,
-                color: mode.ink.withValues(alpha: 0.62),
+                color: kWatchfaces[s.watchface].isImage
+                    ? Colors.white.withValues(alpha: 0.88)
+                    : mode.ink.withValues(alpha: 0.62),
+                shadows: kWatchfaces[s.watchface].isImage
+                    ? const [
+                        Shadow(
+                          color: Color(0xCC000000),
+                          blurRadius: 6,
+                          offset: Offset(0, 1),
+                        ),
+                      ]
+                    : null,
               ),
             ),
           ),
@@ -221,22 +253,26 @@ class AyahCard extends StatelessWidget {
 }
 
 class _Word extends StatelessWidget {
-  final String text;
+  final AyahWord word;
+  final int totalWords;
   final double size;
   final bool active;
   final bool read;
   final bool dim;
   final bool playing;
   final AppThemeMode mode;
+  final bool isImage;
 
   const _Word({
-    required this.text,
+    required this.word,
+    required this.totalWords,
     required this.size,
     required this.active,
     required this.read,
     required this.dim,
     required this.playing,
     required this.mode,
+    this.isImage = false,
   });
 
   @override
@@ -254,7 +290,7 @@ class _Word extends StatelessWidget {
       color = ink.withValues(alpha: dim ? 0.38 : 0.6);
     }
 
-    return AnimatedScale(
+    final wordWidget = AnimatedScale(
       scale: active ? 1.07 : 1.0,
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
@@ -265,43 +301,63 @@ class _Word extends StatelessWidget {
           fontSize: size,
           height: 1.7,
           color: color,
+          shadows: isImage
+              ? const [
+                  Shadow(
+                    color: Color(0xD9000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 1.5),
+                  ),
+                ]
+              : null,
         ),
-        child: Text(text),
+        child: Text(word.text),
       ),
     );
-  }
-}
 
-class _LiveDot extends StatefulWidget {
-  final Color color;
-  const _LiveDot({required this.color});
+    if (word.gloss != null && word.gloss!.isNotEmpty) {
+      return Tooltip(
+        waitDuration: const Duration(milliseconds: 150),
+        showDuration: const Duration(seconds: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E22),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: mode.accent,
+            width: 0.8,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        richMessage: TextSpan(
+          children: [
+            TextSpan(
+              text: '${word.gloss}\n',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            TextSpan(
+              text: 'Word ${word.position} of $totalWords',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            ),
+          ],
+        ),
+        child: wordWidget,
+      );
+    }
 
-  @override
-  State<_LiveDot> createState() => _LiveDotState();
-}
-
-class _LiveDotState extends State<_LiveDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1200),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween(begin: 0.35, end: 1.0).animate(_c),
-      child: Container(
-        width: 7,
-        height: 7,
-        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
-      ),
-    );
+    return wordWidget;
   }
 }

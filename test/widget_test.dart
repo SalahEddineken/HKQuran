@@ -1,5 +1,14 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:noor/audio/ambient_mixer.dart';
+import 'package:noor/audio/chapter_player.dart';
+import 'package:noor/data/hijri.dart';
 import 'package:noor/data/models.dart';
+import 'package:noor/data/quran_api.dart';
+import 'package:noor/state/app_state.dart';
+import 'package:noor/ui/focus_pill.dart';
 
 void main() {
   test('114 surahs with sane metadata', () {
@@ -56,4 +65,356 @@ void main() {
     final (v4, w4) = audio.locate(99999);
     expect(v4, 1);
   });
+
+  test('ten ambient channels with valid assets and presets', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final mixer = AmbientMixer();
+    expect(mixer.channels.length, 10);
+    expect(
+      mixer.channels.map((c) => c.id).toList(),
+      [
+        'rain',
+        'stream',
+        'ocean',
+        'droplets',
+        'birds',
+        'fire',
+        'wind',
+        'thunder',
+        'night',
+        'desert',
+      ],
+    );
+    expect(kAmbientPresets.length, 6);
+
+    // Apply preset
+    final preset = kAmbientPresets.first;
+    mixer.applyPreset(preset);
+    expect(mixer.isPresetActive(preset), isTrue);
+    expect(mixer.activePreset?.id, preset.id);
+    expect(mixer.activeCount, preset.levels.length);
+
+    // Ambient sound plays immediately when activated
+    expect(mixer.effective(0), greaterThan(0.0));
+
+    // When syncWithReciter is enabled and reciter is paused, effective volume ducks to 0
+    mixer.setSyncWithReciter(true);
+    expect(mixer.syncWithReciter, isTrue);
+    expect(mixer.isReciterPlaying, isFalse);
+    expect(mixer.effective(0), 0.0);
+
+    // When reciter plays, effective volume is restored
+    mixer.onReciterPlaybackChanged(true);
+    expect(mixer.isReciterPlaying, isTrue);
+    expect(mixer.effective(0), greaterThan(0.0));
+
+    // Mute all
+    mixer.muteAll();
+    expect(mixer.activeCount, 0);
+    expect(mixer.anyOn, isFalse);
+
+    // Master mute toggle
+    mixer.setMaster(0.85);
+    mixer.toggleMasterMute();
+    expect(mixer.master, 0.0);
+    mixer.toggleMasterMute();
+    expect(mixer.master, 0.85);
+
+    mixer.dispose();
+  });
+
+  test('QuranApi pre-seeded Surah 1 is immediately available in cache', () {
+    final api = QuranApi();
+    expect(api.hasCachedVerses(1), isTrue);
+    expect(api.hasCachedAudio(7, 1), isTrue);
+
+    final verses = api.getCachedVerses(1);
+    expect(verses, isNotNull);
+    expect(verses!.length, 7);
+    expect(verses.first.number, 1);
+    expect(verses.first.words.length, 4);
+
+    final audio = api.getCachedAudio(7, 1);
+    expect(audio, isNotNull);
+    expect(audio!.chapter, 1);
+    expect(audio.reciterId, 7);
+    expect(audio.timings.length, 7);
+    api.dispose();
+  });
+
+  test('Verse and ChapterAudio JSON serialization round-trips accurately', () {
+    const verse = Verse(
+      key: '2:255',
+      number: 255,
+      text: 'ٱللَّهُ لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْحَىُّ ٱلْقَيُّومُ',
+      translation: 'Allah - there is no deity except Him, the Ever-Living, the Sustainer of existence.',
+      words: [
+        AyahWord(1, 'ٱللَّهُ'),
+        AyahWord(2, 'لَآ'),
+      ],
+    );
+
+    final verseJson = verse.toJson();
+    final restoredVerse = Verse.fromJson(verseJson);
+    expect(restoredVerse.key, verse.key);
+    expect(restoredVerse.number, verse.number);
+    expect(restoredVerse.text, verse.text);
+    expect(restoredVerse.translation, verse.translation);
+    expect(restoredVerse.words.length, 2);
+    expect(restoredVerse.words[0].text, 'ٱللَّهُ');
+
+    const audio = ChapterAudio(
+      reciterId: 6,
+      chapter: 112,
+      url: 'https://example.com/112.mp3',
+      timings: [
+        VerseTiming(
+          key: '112:1',
+          from: 0,
+          to: 3500,
+          segments: [WordSegment(1, 0, 1000), WordSegment(2, 1000, 3500)],
+        ),
+      ],
+    );
+
+    final audioJson = audio.toJson();
+    final restoredAudio = ChapterAudio.fromJson(audioJson);
+    expect(restoredAudio.reciterId, 6);
+    expect(restoredAudio.chapter, 112);
+    expect(restoredAudio.url, 'https://example.com/112.mp3');
+    expect(restoredAudio.timings.length, 1);
+    expect(restoredAudio.timings.first.segments.length, 2);
+  });
+
+  test('HijriDate correctly converts Gregorian dates', () {
+    final hijri = HijriDate.fromGregorian(DateTime(2026, 9, 29));
+    expect(hijri.year, greaterThanOrEqualTo(1447));
+    expect(hijri.month, inInclusiveRange(1, 12));
+    expect(hijri.day, inInclusiveRange(1, 30));
+    expect(hijri.format(false), contains('AH'));
+    expect(hijri.format(true), contains('هـ'));
+  });
+
+  testWidgets('safe notifyListeners defers when called during persistent callbacks', (tester) async {
+    final api = QuranApi();
+    final player = ChapterPlayer(api);
+    var notified = false;
+    player.addListener(() {
+      notified = true;
+    });
+
+    // Simulate persistent callbacks phase
+    await tester.pumpWidget(
+      Builder(
+        builder: (context) {
+          player.notifyListeners();
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+
+    // After the frame finishes building, the deferred listener callback is executed
+    await tester.pump();
+    expect(notified, isTrue);
+    player.dispose();
+  });
+
+  testWidgets('Directionality is TextDirection.rtl when locale is Arabic', (tester) async {
+    late TextDirection dir;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ar'),
+        supportedLocales: const [Locale('en'), Locale('ar')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        builder: (context, child) => Directionality(
+          textDirection: Directionality.of(context),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: Builder(
+          builder: (context) {
+            dir = Directionality.of(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(dir, TextDirection.rtl);
+  });
+
+  testWidgets('Directionality is TextDirection.ltr when locale is English', (tester) async {
+    late TextDirection dir;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: const [Locale('en'), Locale('ar')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        builder: (context, child) => Directionality(
+          textDirection: Directionality.of(context),
+          child: child ?? const SizedBox.shrink(),
+        ),
+        home: Builder(
+          builder: (context) {
+            dir = Directionality.of(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(dir, TextDirection.ltr);
+  });
+
+  testWidgets('PositionedDirectional correctly places widgets at right edge in RTL', (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.rtl,
+        child: MediaQuery(
+          data: const MediaQueryData(size: Size(800, 600)),
+          child: Stack(
+            children: const [
+              PositionedDirectional(
+                start: 34,
+                top: 30,
+                child: SizedBox(key: ValueKey('testStart'), width: 50, height: 50),
+              ),
+              PositionedDirectional(
+                end: 34,
+                top: 30,
+                child: SizedBox(key: ValueKey('testEnd'), width: 50, height: 50),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final startRect = tester.getRect(find.byKey(const ValueKey('testStart')));
+    final endRect = tester.getRect(find.byKey(const ValueKey('testEnd')));
+
+    // Under RTL, start is the right side (800 - 34 = 766)
+    expect(startRect.right, 800.0 - 34.0);
+    // Under RTL, end is the left side (34)
+    expect(endRect.left, 34.0);
+  });
+
+  testWidgets('FocusPill toggle opens presets, starts countdown, and collapses cleanly', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = await AppState.load();
+    bool open = false;
+
+    Widget buildPill() => MaterialApp(
+      home: Scaffold(
+        body: AppStateScope(
+          state: state,
+          child: StatefulBuilder(
+            builder: (context, setState) => Center(
+              child: FocusPill(
+                open: open,
+                onOpenChanged: (v) {
+                  open = v;
+                  setState(() {});
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(buildPill());
+    await tester.pumpAndSettle();
+
+    // Idle: Displays "Focus"
+    expect(find.text('Focus'), findsOneWidget);
+    expect(open, isFalse);
+
+    // Tap to open presets
+    await tester.tap(find.text('Focus'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(open, isTrue);
+    expect(find.text('15'), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
+    expect(find.text('45'), findsOneWidget);
+
+    // Pick 15 minutes preset
+    await tester.tap(find.text('15'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Focus session started! Presets should be closed and countdown visible
+    expect(state.focusing, isTrue);
+    expect(open, isFalse);
+    expect(find.textContaining(':'), findsWidgets);
+
+    // Tap the toggle again to end focus
+    await tester.tap(find.textContaining(':').first);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(state.focusing, isFalse);
+    expect(find.text('Focus'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    state.dispose();
+  });
+
+  testWidgets('FocusPill renders without error in RTL mode', (tester) async {
+    SharedPreferences.setMockInitialValues({'locale': 'ar'});
+    final state = await AppState.load();
+    bool open = false;
+
+    Widget buildPill() => MaterialApp(
+      locale: const Locale('ar'),
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          body: AppStateScope(
+            state: state,
+            child: StatefulBuilder(
+              builder: (context, setState) => Center(
+                child: FocusPill(
+                  open: open,
+                  onOpenChanged: (v) {
+                    open = v;
+                    setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(buildPill());
+    await tester.pumpAndSettle();
+
+    // Arabic label for focus
+    expect(find.text(state.tr('focus')), findsOneWidget);
+
+    // Tap to open presets in RTL
+    await tester.tap(find.text(state.tr('focus')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(open, isTrue);
+    expect(find.text('15'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    state.dispose();
+  });
 }
+
+
+

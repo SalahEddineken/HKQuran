@@ -1,5 +1,5 @@
 name: noor
-description: "Noor — an immersive Quran player with reciters, karaoke ayah display, ambient sound mixer and a zeno-inspired liquid-glass interface."
+description: "Noor — an immersive Quran player with reciters, karaoke ayah display, ambient sound mixer and a clean, high-performance interface."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -43,7 +43,9 @@ dependencies:
   http: ^1.6.0
   shared_preferences: ^2.5.5
   intl: 0.20.2
-  liquid_glass_ui_design: ^1.0.5
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.10.0
+  just_audio_windows: ^0.2.3
 
 dependency_overrides:
   # Real package is only needed for iOS/macOS (via just_audio →
@@ -78,6 +80,10 @@ flutter:
   assets:
     - assets/bg/
     - assets/ambient/
+    - assets/quran/
+    - assets/quran/surahs/
+    - assets/quran/timings/
+    - assets/audio/
 
   fonts:
     - family: UthmanicHafs

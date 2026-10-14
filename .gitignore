@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Tooling and IDE temporary files
+.flutter
+.flutter_tool_state
+.freebuff/
+.workbuddy-ai/
+test/tmpf/
+
+# Large binary audio assets (streamed via CDN / Firebase Storage)
+assets/audio/
