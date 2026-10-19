@@ -58,7 +58,7 @@ class AppState extends ChangeNotifier {
   // ---- persisted settings ----
   Locale locale = const Locale('en');
   AppThemeMode themeMode = AppThemeMode.dark;
-  int watchface = 3;
+  int watchface = 2;
   int? _previewWatchface;
 
   int get effectiveWatchface => _previewWatchface ?? watchface;
@@ -100,7 +100,7 @@ class AppState extends ChangeNotifier {
 
   void _restore() {
     locale = Locale(prefs.getString('locale') ?? 'en');
-    watchface = (prefs.getInt('watchface') ?? 3).clamp(
+    watchface = (prefs.getInt('watchface') ?? 2).clamp(
       0,
       kWatchfaces.length - 1,
     );
@@ -117,7 +117,8 @@ class AppState extends ChangeNotifier {
     player.setSpeed(savedSpeed);
 
     final savedRepeat = prefs.getInt('repeatMode') ?? 0;
-    player.repeatMode = AudioRepeatMode.values[savedRepeat.clamp(0, AudioRepeatMode.values.length - 1)];
+    player.repeatMode = AudioRepeatMode
+        .values[savedRepeat.clamp(0, AudioRepeatMode.values.length - 1)];
 
     final vols = (prefs.getStringList(
       'ambVol',
@@ -132,13 +133,16 @@ class AppState extends ChangeNotifier {
 
     final savedTodos = prefs.getStringList('todos_list');
     if (savedTodos != null) {
-      todos = savedTodos.map((s) {
-        try {
-          return TodoItem.fromJson(jsonDecode(s) as Map<String, dynamic>);
-        } catch (_) {
-          return null;
-        }
-      }).whereType<TodoItem>().toList();
+      todos = savedTodos
+          .map((s) {
+            try {
+              return TodoItem.fromJson(jsonDecode(s) as Map<String, dynamic>);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<TodoItem>()
+          .toList();
     } else {
       todos = [];
     }
@@ -473,7 +477,8 @@ class AppState extends ChangeNotifier {
   @override
   void notifyListeners() {
     try {
-      if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
         SchedulerBinding.instance.addPostFrameCallback((_) {
           if (hasListeners) super.notifyListeners();
         });
