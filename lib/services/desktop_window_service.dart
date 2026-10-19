@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
 class DesktopWindowService extends ChangeNotifier with WindowListener, TrayListener {
@@ -65,18 +66,40 @@ class DesktopWindowService extends ChangeNotifier with WindowListener, TrayListe
     try {
       trayManager.addListener(this);
       
-      // Use existing app icon
-      await trayManager.setIcon(
-        Platform.isWindows
-            ? 'windows/runner/resources/app_icon.ico'
-            : 'assets/app_icon.ico',
-      );
+      // Resolve app icon path reliably across local debug and installed Release
+      String? iconPath;
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final candidates = [
+        '$exeDir\\app_icon.ico',
+        '$exeDir\\data\\flutter_assets\\assets\\logo\\app_icon.ico',
+        '$exeDir\\data\\flutter_assets\\assets\\app_icon.ico',
+        'assets/logo/app_icon.ico',
+        'windows/runner/resources/app_icon.ico',
+        'assets/app_icon.ico',
+      ];
+
+      for (final p in candidates) {
+        if (File(p).existsSync()) {
+          iconPath = p;
+          break;
+        }
+      }
+
+      if (iconPath != null) {
+        await trayManager.setIcon(iconPath);
+      } else {
+        await trayManager.setIcon('assets/logo/app_icon.ico');
+      }
 
       final menu = Menu(
         items: [
           MenuItem(
             key: 'show_window',
-            label: 'فتح HKQuran / Open HKQuran',
+            label: 'فتح التطبيق / Open HKQuran',
+          ),
+          MenuItem(
+            key: 'check_updates',
+            label: 'التحقق من التحديثات / Check for Updates',
           ),
           MenuItem.separator(),
           MenuItem(
@@ -85,7 +108,7 @@ class DesktopWindowService extends ChangeNotifier with WindowListener, TrayListe
           ),
           MenuItem(
             key: 'show_dhikr',
-            label: 'إشعار الذكر / Show Dhikr',
+            label: 'إشعار الذكر / Show Dhikr Reminder',
           ),
           MenuItem.separator(),
           MenuItem(
@@ -148,25 +171,34 @@ class DesktopWindowService extends ChangeNotifier with WindowListener, TrayListe
 
   @override
   void onTrayIconMouseDown() async {
-    final isVisible = await windowManager.isVisible();
-    if (isVisible) {
-      final isMinimized = await windowManager.isMinimized();
-      if (isMinimized) {
-        await windowManager.restore();
-      }
-      await windowManager.focus();
-    } else {
-      await windowManager.show();
-      await windowManager.focus();
-    }
+    await trayManager.popUpContextMenu();
+  }
+
+  @override
+  void onTrayIconRightMouseDown() async {
+    await trayManager.popUpContextMenu();
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) async {
     switch (menuItem.key) {
       case 'show_window':
+        final isMinimized = await windowManager.isMinimized();
+        if (isMinimized) {
+          await windowManager.restore();
+        }
         await windowManager.show();
         await windowManager.focus();
+        break;
+      case 'check_updates':
+        try {
+          await launchUrl(
+            Uri.parse('https://github.com/SalahEddineken/HKQuran/releases/latest'),
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (e) {
+          debugPrint('Error launching update URL: $e');
+        }
         break;
       case 'toggle_play':
         onPlayPauseToggle?.call();

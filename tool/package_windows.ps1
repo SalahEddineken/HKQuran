@@ -26,6 +26,9 @@ if (-not (Test-Path $distDir)) {
     New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 }
 
+# Copy app_icon.ico directly alongside executable for bulletproof tray icon loading
+Copy-Item -Path "windows\runner\resources\app_icon.ico" -Destination "$releaseDir\app_icon.ico" -Force
+
 # 2. Create Portable Zip
 $zipName = "Quran-Windows-x64-v$Version.zip"
 $zipPath = "$distDir\$zipName"
