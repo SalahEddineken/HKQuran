@@ -37,8 +37,10 @@ Write-Host "--> Created $zipName successfully!" -ForegroundColor Green
 # 3. Check for Inno Setup compiler to create Setup.exe
 $isccPaths = @(
     "iscc",
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "C:\Program Files\Inno Setup 7\ISCC.exe",
+    "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
     "C:\Program Files\Inno Setup 6\ISCC.exe",
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
 )
 
@@ -65,7 +67,7 @@ if ($iscc) {
 }
 
 Write-Host "`n===============================================" -ForegroundColor Green
-Write-Host " Done! Files ready to upload in $distDir:     " -ForegroundColor Green
+Write-Host " Done! Files ready to upload in ${distDir}:     " -ForegroundColor Green
 Get-ChildItem -Path $distDir | ForEach-Object {
     Write-Host ("  - " + $_.Name + " (" + [math]::Round($_.Length / 1MB, 2) + " MB)") -ForegroundColor White
 }
