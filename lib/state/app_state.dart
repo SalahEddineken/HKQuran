@@ -58,7 +58,7 @@ class AppState extends ChangeNotifier {
   // ---- persisted settings ----
   Locale locale = const Locale('en');
   AppThemeMode themeMode = AppThemeMode.dark;
-  int watchface = 2;
+  int watchface = 3;
   int? _previewWatchface;
 
   int get effectiveWatchface => _previewWatchface ?? watchface;
@@ -100,13 +100,13 @@ class AppState extends ChangeNotifier {
 
   void _restore() {
     locale = Locale(prefs.getString('locale') ?? 'en');
-    watchface = (prefs.getInt('watchface') ?? 2).clamp(
+    watchface = (prefs.getInt('watchface') ?? 3).clamp(
       0,
       kWatchfaces.length - 1,
     );
     _syncThemeWithWatchface();
     reciterId = prefs.getInt('reciter') ?? kReciters.first.id;
-    chapter = (prefs.getInt('chapter') ?? 1).clamp(1, 114);
+    chapter = 1;
     showTranslation = prefs.getBool('translation') ?? true;
     autoAdvance = prefs.getBool('autoAdvance') ?? true;
     arabicTextScale = (prefs.getDouble('arabicScale') ?? 1.0).clamp(0.8, 1.4);
