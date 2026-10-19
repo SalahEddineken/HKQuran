@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Tiny bilingual string table (English / Arabic).
 const Map<String, Map<String, String>> kStrings = {
-  'appName': {'en': 'Noor', 'ar': 'نور'},
+  'appName': {'en': 'HKQuran', 'ar': 'HKQuran'},
   'focus': {'en': 'Focus', 'ar': 'تركيز'},
   'min': {'en': 'min', 'ar': 'د'},
   'endFocus': {'en': 'End focus', 'ar': 'إنهاء التركيز'},
@@ -26,6 +26,9 @@ const Map<String, Map<String, String>> kStrings = {
   'search': {'en': 'Search surah…', 'ar': 'ابحث عن سورة…'},
   'emptySearch': {'en': 'No surah matches', 'ar': 'لا توجد نتائج'},
   'about': {'en': 'About', 'ar': 'حول التطبيق'},
+  'developer': {'en': 'Developer & Links', 'ar': 'المطور والروابط'},
+  'website': {'en': 'Website', 'ar': 'الموقع الإلكتروني'},
+  'github': {'en': 'GitHub', 'ar': 'جيت هاب'},
   'credits': {'en': 'Image credits', 'ar': 'مصادر الصور'},
   'bismillah': {
     'en': 'In the name of God, the Most Gracious, the Most Merciful',
@@ -36,7 +39,7 @@ const Map<String, Map<String, String>> kStrings = {
     'en': 'Tap an ayah to jump to it',
     'ar': 'اضغط على آية للانتقال إليها',
   },
-  'soundscapes': {'en': 'Soundscapes', 'ar': 'أجواء مختارة'},
+  'soundscapes': {'en': 'Presets', 'ar': 'أجواء جاهزة'},
   'activeSounds': {'en': 'active', 'ar': 'نشط'},
   'muteAll': {'en': 'Silence all', 'ar': 'إسكات الكل'},
   'allCategory': {'en': 'All', 'ar': 'الكل'},
@@ -57,26 +60,6 @@ const Map<String, Map<String, String>> kStrings = {
   'presetRawdah': {'en': 'Rawdah', 'ar': 'الروضة'},
   'presetCoastal': {'en': 'Coast', 'ar': 'شاطئ'},
   'presetSanctuary': {'en': 'Sanctuary', 'ar': 'سكينة'},
-  'presetTahajjud': {'en': 'Tahajjud Rain', 'ar': 'مطر التهجد'},
-  'vibeQuran': {'en': 'Viby Quran', 'ar': 'تلاوة وأجواء'},
-  'vibeDesc': {
-    'en': 'Blend reciter and ambient atmosphere',
-    'ar': 'امزج تلاوة القارئ بالأصوات المحيطة',
-  },
-  'reciterVolume': {'en': 'Reciter volume', 'ar': 'صوت القارئ'},
-  'ambientVolume': {'en': 'Ambient volume', 'ar': 'صوت الأجواء'},
-  'syncWithReciter': {'en': 'Sync with Reciter', 'ar': 'مزامنة مع القارئ'},
-  'syncWithReciterDesc': {
-    'en': 'Play atmosphere when Quran is reciting, fade when paused',
-    'ar': 'تشغيل الأجواء مع التلاوة والتلاشي عند الإيقاف',
-  },
-  'customizeSounds': {'en': '10-Channel Mixer', 'ar': 'موزع القنوات العشر'},
-  'vibeActive': {'en': 'Vibe mix active', 'ar': 'المزيج نشط'},
-  'blended': {'en': 'Reciter & Ambience blended', 'ar': 'تلاوة ممتزجة مع الأجواء'},
-  'tapToVibe': {
-    'en': 'Select an atmosphere to mix with recitation',
-    'ar': 'اختر أجواء للمزج مع التلاوة',
-  },
   'speed': {'en': 'Speed', 'ar': 'السرعة'},
   'repeat': {'en': 'Repeat', 'ar': 'تكرار'},
   'repeatOff': {'en': 'Repeat: Off', 'ar': 'التكرار: معطل'},
@@ -92,6 +75,16 @@ const Map<String, Map<String, String>> kStrings = {
   'sessionComplete': {'en': 'Focus session completed', 'ar': 'اكتملت جلسة التركيز'},
   'alhamdulillah': {'en': 'Alhamdulillah', 'ar': 'الحمد لله'},
   'wordInfo': {'en': 'Word meaning', 'ar': 'معنى الكلمة'},
+  'today': {'en': 'Today', 'ar': 'اليوم'},
+  'addTodo': {'en': 'Add to-do', 'ar': 'إضافة مهمة'},
+  'todoHint': {'en': 'Add a task…', 'ar': 'اكتب مهمة…'},
+  'clearCompleted': {'en': 'Clear completed', 'ar': 'مسح المكتمل'},
+  'collapse': {'en': 'Collapse', 'ar': 'تصغير'},
+  'downloadApp': {'en': 'Download App', 'ar': 'تحميل التطبيق'},
+  'downloadDesktopApp': {
+    'en': 'Download desktop app (Windows)',
+    'ar': 'تحميل تطبيق سطح المكتب (Windows)',
+  },
 };
 
 extension StringsX on BuildContext {
@@ -102,7 +95,7 @@ extension StringsX on BuildContext {
   }
 }
 
-ThemeData noorTheme(Brightness brightness, Color seed) {
+ThemeData hkquranTheme(Brightness brightness, Color seed) {
   final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
   final base = ThemeData(
     useMaterial3: true,
@@ -151,6 +144,10 @@ class NoRipple extends InteractiveInkFeatureFactory {
     );
   }
 }
+
+/// Backward compatibility alias
+ThemeData noorTheme(Brightness brightness, Color seed) =>
+    hkquranTheme(brightness, seed);
 
 class _NoRippleFeature extends InteractiveInkFeature {
   _NoRippleFeature({

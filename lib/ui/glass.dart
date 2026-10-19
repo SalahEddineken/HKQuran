@@ -120,6 +120,7 @@ class _SolidSurface extends StatelessWidget {
 class GlassButton extends StatefulWidget {
   final Widget icon;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final double size;
   final Color? color;
   final String? tooltip;
@@ -128,6 +129,7 @@ class GlassButton extends StatefulWidget {
     super.key,
     required this.icon,
     this.onTap,
+    this.onLongPress,
     this.size = 48,
     this.color,
     this.tooltip,
@@ -154,10 +156,11 @@ class _GlassButtonState extends State<GlassButton> {
 
     final btn = Semantics(
       button: true,
-      enabled: widget.onTap != null,
+      enabled: widget.onTap != null || widget.onLongPress != null,
       label: widget.tooltip,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onLongPress: widget.onLongPress,
         onTapDown: (_) {
           if (mounted) setState(() => _pressed = true);
         },

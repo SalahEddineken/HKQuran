@@ -124,7 +124,6 @@ class _FocusPillState extends State<FocusPill> {
     final screenW = MediaQuery.sizeOf(context).width;
     final anchored =
         screenW / 2 - _kPillIdleW / 2 - 24 > _kPresetRowW + _kStripGap;
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(
@@ -151,6 +150,8 @@ class _FocusPillState extends State<FocusPill> {
             final row = Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (anchored)
+                  SizedBox(width: (_kStripGap + _kPresetRowW) * stripT),
                 _FocusToggle(
                   width: pillW,
                   t: t,
@@ -193,17 +194,7 @@ class _FocusPillState extends State<FocusPill> {
               ],
             );
 
-            if (!anchored) return row;
-            return Transform.translate(
-              offset: Offset(
-                (isRtl ? -1.0 : 1.0) *
-                    (_kStripGap + _kPresetRowW) *
-                    stripT /
-                    2.0,
-                0,
-              ),
-              child: row,
-            );
+            return row;
           },
         ),
       ),
@@ -249,12 +240,20 @@ class _FocusToggle extends StatelessWidget {
       t,
     )!;
 
+    // In liquid(), a 1px border insets the stack by 1px on each side.
+    // To achieve a uniform 4px inset from the pill's outer edges:
+    // start inset inside the stack is 4 - 1 = 3px.
+    // end inset inside the stack is (width - 2) - 3 - _kKnobD = width - 5 - _kKnobD.
     final labelStart = _lerp(
-      _kKnobInset + _kKnobD + _kLabelGapIdle,
-      _kLabelPadArmed,
+      _kKnobInset + _kKnobD + _kLabelGapIdle - 1.0,
+      _kLabelPadArmed - 1.0,
       t,
     );
-    final knobStart = _lerp(_kKnobInset, width - _kKnobInset - _kKnobD, t);
+    final knobStart = _lerp(
+      _kKnobInset - 1.0,
+      width - (_kKnobInset - 1.0) - _kKnobD - 2.0,
+      t,
+    );
 
     // As the knob crosses the pill, the label dips cleanly out of sight
     // so characters never awkwardly poke out behind the knob.
@@ -311,20 +310,23 @@ class _FocusToggle extends StatelessWidget {
             ),
             PositionedDirectional(
               start: knobStart,
-              top: _kKnobInset,
-              child: Container(
-                width: _kKnobD,
-                height: _kKnobD,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.18),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  width: _kKnobD,
+                  height: _kKnobD,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -432,11 +434,9 @@ class _DurationButtonState extends State<_DurationButton> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
+      onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
       child: AnimatedScale(
         scale: _pressed ? 0.90 : 1.0,
         duration: const Duration(milliseconds: 120),

@@ -3,14 +3,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../audio/chapter_player.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/palette.dart';
 import 'glass.dart';
-import 'vibe_hud.dart';
 
 /// Bottom glass transport: spinning vinyl, waveform scrubber, controls.
 ///
@@ -18,7 +16,12 @@ import 'vibe_hud.dart';
 /// backdrop shader never re-runs while audio position ticks or the vinyl
 /// spins — only the tiny spinning/text layers repaint.
 class PlayerBar extends StatefulWidget {
-  const PlayerBar({super.key});
+  final bool hideNextPrev;
+
+  const PlayerBar({
+    super.key,
+    this.hideNextPrev = false,
+  });
 
   @override
   State<PlayerBar> createState() => _PlayerBarState();
@@ -33,7 +36,6 @@ class _PlayerBarState extends State<PlayerBar>
 
   Timer? _volHudTimer;
   bool _showVolHud = false;
-  bool _showVibeHud = false;
   double? _lastVolume;
 
   void _showVolumeFeedback() {
@@ -87,7 +89,7 @@ class _PlayerBarState extends State<PlayerBar>
     final s = AppStateScope.of(context);
     final player = s.player;
     final mode = s.themeMode;
-    final isImage = kWatchfaces[s.watchface].isImage;
+    final isImage = kWatchfaces[s.effectiveWatchface].isImage;
     final meta = kSurahs[s.chapter - 1];
     final reciter = reciterById(player.reciterId);
     final width = MediaQuery.sizeOf(context).width;
@@ -174,49 +176,27 @@ class _PlayerBarState extends State<PlayerBar>
               ),
             ),
           ),
-          // Floating Vibe HUD Card directly above PlayerBar
-          Positioned(
-            bottom: isSmall ? 68 : 84,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              offset: _showVibeHud ? Offset.zero : const Offset(0, 0.12),
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: _showVibeHud ? 1.0 : 0.0,
-                child: IgnorePointer(
-                  ignoring: !_showVibeHud,
-                  child: VibeHudCard(
-                    onClose: () => setState(() => _showVibeHud = false),
-                    onOpenFullMixer: () {
-                      setState(() => _showVibeHud = false);
-                      s.onOpenAmbientPanel?.call();
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
           SizedBox(
             width: barWidth,
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: isSmall ? 12 : 20,
-                vertical: isSmall ? 8 : 14,
+                horizontal: isSmall ? (width < 360 ? 8 : 12) : 20,
+                vertical: isSmall ? 6 : 14,
               ),
               child: Row(
                 children: [
             // Spinning vinyl play/pause button
             _SpinningVinylButton(
-              size: isSmall ? 40 : 54,
+              size: isSmall ? (width < 360 ? 36 : 40) : 54,
               animation: _spin,
               playing: playing,
+              chapter: s.chapter,
               accent: mode.accent,
               ink: mode.ink,
               onTap: player.togglePlay,
               tooltip: s.tr(playing ? 'pause' : 'play'),
             ),
-            SizedBox(width: isSmall ? 10 : 16),
+            SizedBox(width: isSmall ? (width < 360 ? 6 : 10) : 16),
 
             // info + scrubber
             Expanded(
@@ -246,117 +226,6 @@ class _PlayerBarState extends State<PlayerBar>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      // Repeat Ayah toggle button in surat title
-                      GestureDetector(
-                        onTap: s.cycleAyahRepeatTarget,
-                        child: Tooltip(
-                          message:
-                              '${s.tr('repeatAyah')}: ${player.ayahRepeatTarget == 0 ? "∞" : "${player.ayahRepeatTarget}x"}',
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isSmall ? 5 : 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              color: player.repeatMode ==
-                                      AudioRepeatMode.repeatAyah
-                                  ? (mode.brightness == Brightness.light
-                                      ? const Color(0xFFFBF4E6)
-                                      : const Color(0xFF2D271B))
-                                  : (mode.brightness == Brightness.light
-                                      ? const Color(0xFFF4F4F5)
-                                      : const Color(0xFF27272A)),
-                              border: Border.all(
-                                color: player.repeatMode ==
-                                        AudioRepeatMode.repeatAyah
-                                    ? mode.accent
-                                    : (mode.brightness == Brightness.light
-                                        ? const Color(0xFFE4E4E7)
-                                        : const Color(0xFF333338)),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.repeat_rounded,
-                                  size: isSmall ? 11 : 13,
-                                  color: player.repeatMode ==
-                                          AudioRepeatMode.repeatAyah
-                                      ? mode.accent
-                                      : mode.inkSoft,
-                                ),
-                                const SizedBox(width: 2.5),
-                                Text(
-                                  player.ayahRepeatTarget == 0
-                                      ? '∞'
-                                      : '${player.ayahRepeatTarget}x',
-                                  style: TextStyle(
-                                    fontSize: isSmall ? 9 : 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: player.repeatMode ==
-                                            AudioRepeatMode.repeatAyah
-                                        ? mode.accent
-                                        : mode.inkSoft,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (s.mixer.activeCount > 0) ...[
-                        const SizedBox(width: 5),
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _showVibeHud = !_showVibeHud);
-                          },
-                          child: Tooltip(
-                            message: s.tr('vibeQuran'),
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isSmall ? 5 : 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: mode.accent.withValues(alpha: 0.18),
-                                border: Border.all(
-                                  color: mode.accent.withValues(alpha: 0.45),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.auto_awesome_rounded,
-                                    size: isSmall ? 10 : 12,
-                                    color: mode.accent,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    s.mixer.activePreset != null
-                                        ? (s.ar
-                                            ? s.mixer.activePreset!.ar
-                                            : s.mixer.activePreset!.en)
-                                        : '${s.mixer.activeCount}',
-                                    style: TextStyle(
-                                      fontSize: isSmall ? 9 : 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: mode.accent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                       const SizedBox(width: 8),
                       // Position ticks every ~200 ms while playing; keep the
                       // text in its own layer so the glass never repaints.
@@ -412,41 +281,37 @@ class _PlayerBarState extends State<PlayerBar>
             SizedBox(width: isSmall ? 8 : 14),
 
                   // transport: previous & next
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _Btn(
-                          icon: Icons.skip_previous_rounded,
-                          size: isSmall ? 32 : 38,
-                          color: mode.ink,
-                          tooltip: s.ar ? 'السورة السابقة' : 'Previous Surah',
-                          onTap: () => s.openSurah(
-                              s.chapter > 1 ? s.chapter - 1 : 114),
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeInOut,
+                    opacity: widget.hideNextPrev ? 0.0 : 1.0,
+                    child: IgnorePointer(
+                      ignoring: widget.hideNextPrev,
+                      child: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _Btn(
+                              icon: Icons.skip_previous_rounded,
+                              size: isSmall ? (width < 360 ? 28 : 32) : 38,
+                              color: mode.ink,
+                              tooltip: s.ar ? 'السورة السابقة' : 'Previous Surah',
+                              onTap: () => s.openSurah(
+                                  s.chapter > 1 ? s.chapter - 1 : 114),
+                            ),
+                            SizedBox(width: isSmall ? 3 : 6),
+                            _Btn(
+                              icon: Icons.skip_next_rounded,
+                              size: isSmall ? (width < 360 ? 28 : 32) : 38,
+                              color: mode.ink,
+                              tooltip: s.ar ? 'السورة التالية' : 'Next Surah',
+                              onTap: () => s.openSurah(
+                                  s.chapter < 114 ? s.chapter + 1 : 1),
+                            ),
+                          ],
                         ),
-                        SizedBox(width: isSmall ? 3 : 6),
-                        _Btn(
-                          icon: Icons.skip_next_rounded,
-                          size: isSmall ? 32 : 38,
-                          color: mode.ink,
-                          tooltip: s.ar ? 'السورة التالية' : 'Next Surah',
-                          onTap: () => s.openSurah(
-                              s.chapter < 114 ? s.chapter + 1 : 1),
-                        ),
-                        SizedBox(width: isSmall ? 3 : 6),
-                        _Btn(
-                          icon: Icons.auto_awesome_rounded,
-                          size: isSmall ? 32 : 38,
-                          color: s.mixer.activeCount > 0 ? mode.accent : mode.ink,
-                          highlight: s.mixer.activeCount > 0 || _showVibeHud,
-                          tooltip: s.tr('vibeQuran'),
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _showVibeHud = !_showVibeHud);
-                          },
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -466,7 +331,7 @@ class _SpinningVinylButton extends StatefulWidget {
   final Color ink;
   final VoidCallback onTap;
   final String tooltip;
-
+  final int? chapter;
   final double size;
 
   const _SpinningVinylButton({
@@ -476,6 +341,7 @@ class _SpinningVinylButton extends StatefulWidget {
     required this.ink,
     required this.onTap,
     required this.tooltip,
+    this.chapter,
     this.size = 54,
   });
 
@@ -555,6 +421,18 @@ class _SpinningVinylButtonState extends State<_SpinningVinylButton> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          // Base Surah logo disk from assets/Surahs logo/
+                          if (widget.chapter != null)
+                            ClipOval(
+                              child: Image.asset(
+                                'assets/Surahs logo/${widget.chapter}.jpg',
+                                fit: BoxFit.cover,
+                                width: widget.size,
+                                height: widget.size,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const SizedBox.shrink(),
+                              ),
+                            ),
                           // Vinyl light reflection sheen (makes rotation clearly visible)
                           DecoratedBox(
                             decoration: BoxDecoration(
@@ -638,7 +516,6 @@ class _Btn extends StatefulWidget {
   final Color color;
   final String? tooltip;
   final VoidCallback? onTap;
-  final bool highlight;
 
   const _Btn({
     required this.icon,
@@ -646,7 +523,6 @@ class _Btn extends StatefulWidget {
     required this.color,
     this.tooltip,
     this.onTap,
-    this.highlight = false,
   });
 
   @override
@@ -666,25 +542,19 @@ class _BtnState extends State<_Btn> {
       height: widget.size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: widget.highlight
-            ? s.themeMode.accent.withValues(alpha: 0.22)
-            : (isLight ? Colors.white : const Color(0xFF222226)),
+        color: isLight ? Colors.white : const Color(0xFF222226),
         border: Border.all(
-          color: widget.highlight
-              ? s.themeMode.accent.withValues(alpha: 0.55)
-              : (isLight
-                  ? const Color(0xFFE4E4E7)
-                  : const Color(0xFF333338)),
-          width: widget.highlight ? 1.2 : 1.0,
+          color: isLight
+              ? const Color(0xFFE4E4E7)
+              : const Color(0xFF333338),
+          width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: widget.highlight
-                ? s.themeMode.accent.withValues(alpha: 0.25)
-                : (isLight
-                    ? const Color(0x0A000000)
-                    : const Color(0x28000000)),
-            blurRadius: widget.highlight ? 8 : 3,
+            color: isLight
+                ? const Color(0x0A000000)
+                : const Color(0x28000000),
+            blurRadius: 3,
             offset: const Offset(0, 1),
           ),
         ],

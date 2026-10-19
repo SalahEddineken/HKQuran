@@ -2,7 +2,7 @@ import 'firebase_quran_service.dart';
 import 'models.dart';
 import 'quran_api.dart';
 
-/// Database repository for Noor powered by Firebase Cloud Firestore & Tanzil database.
+/// Database repository for HKQuran powered by Firebase Cloud Firestore & Tanzil database.
 ///
 /// Features:
 /// - Cloud Firestore real-time & cached queries (project: studio-5996533553-9d4ec)

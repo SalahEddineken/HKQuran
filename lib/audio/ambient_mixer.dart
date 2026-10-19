@@ -30,13 +30,6 @@ const List<AmbientPreset> kAmbientPresets = [
     levels: {'rain': 0.65, 'thunder': 0.30, 'wind': 0.20},
   ),
   AmbientPreset(
-    id: 'tahajjud',
-    en: 'Tahajjud Rain',
-    ar: 'مطر التهجد',
-    icon: Icons.grain_rounded,
-    levels: {'rain': 0.60, 'droplets': 0.50, 'night': 0.25},
-  ),
-  AmbientPreset(
     id: 'rawdah',
     en: 'Rawdah',
     ar: 'الروضة',
@@ -211,25 +204,13 @@ class AmbientMixer extends ChangeNotifier {
   final Map<String, Timer> _ramps = {};
   final Map<String, Future<void>> _loading = {};
 
-  bool syncWithReciter = false;
-  bool isReciterPlaying = false;
-
   double effective(int i) {
     final c = channels[i];
-    if (!c.on) return 0.0;
-    if (syncWithReciter && !isReciterPlaying) return 0.0;
-    return (c.volume * master).clamp(0.0, 1.0);
+    return c.on ? (c.volume * master).clamp(0.0, 1.0) : 0.0;
   }
 
   bool get anyOn => channels.any((c) => c.on);
   int get activeCount => channels.where((c) => c.on).length;
-
-  AmbientPreset? get activePreset {
-    for (final p in kAmbientPresets) {
-      if (isPresetActive(p)) return p;
-    }
-    return null;
-  }
 
   bool isPresetActive(AmbientPreset preset) {
     if (activeCount != preset.levels.length) return false;
@@ -242,46 +223,6 @@ class AmbientMixer extends ChangeNotifier {
       }
     }
     return true;
-  }
-
-  void onReciterPlaybackChanged(bool playing) {
-    if (isReciterPlaying == playing) return;
-    isReciterPlaying = playing;
-    if (syncWithReciter) {
-      for (var i = 0; i < channels.length; i++) {
-        final c = channels[i];
-        if (c.on) {
-          if (playing) {
-            _ensureLoaded(c).then((_) {
-              if (c.on && isReciterPlaying && c.player.processingState != ProcessingState.idle && !c.player.playing) {
-                c.player.play();
-              }
-            });
-          }
-          _ramp(c, effective(i));
-        }
-      }
-    }
-    notifyListeners();
-  }
-
-  void setSyncWithReciter(bool v) {
-    if (syncWithReciter == v) return;
-    syncWithReciter = v;
-    for (var i = 0; i < channels.length; i++) {
-      final c = channels[i];
-      if (c.on) {
-        if (!syncWithReciter || isReciterPlaying) {
-          _ensureLoaded(c).then((_) {
-            if (c.on && effective(i) > 0 && c.player.processingState != ProcessingState.idle && !c.player.playing) {
-              c.player.play();
-            }
-          });
-        }
-        _ramp(c, effective(i));
-      }
-    }
-    notifyListeners();
   }
 
   void applyPreset(AmbientPreset preset) {
@@ -374,17 +315,13 @@ class AmbientMixer extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Restore persisted mixer state (levels, toggles, master, sync).
+  /// Restore persisted mixer state (levels, toggles, master).
   void restore(
     List<double> volumes,
     List<bool> ons,
-    double savedMaster, {
-    bool? savedSync,
-    bool initialReciterPlaying = false,
-  }) {
+    double savedMaster,
+  ) {
     master = savedMaster.clamp(0, 1).toDouble();
-    if (savedSync != null) syncWithReciter = savedSync;
-    isReciterPlaying = initialReciterPlaying;
 
     for (var i = 0; i < channels.length; i++) {
       final c = channels[i];

@@ -1,20 +1,23 @@
-import 'theme/palette.dart';
+import 'dart:io';
+import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'theme/palette.dart';
 
 import 'state/app_state.dart';
 import 'theme/strings.dart';
 import 'ui/home_screen.dart';
 
-class NoorApp extends StatefulWidget {
+class HKQuranApp extends StatefulWidget {
   final AppState state;
-  const NoorApp({super.key, required this.state});
+  const HKQuranApp({super.key, required this.state});
 
   @override
-  State<NoorApp> createState() => _NoorAppState();
+  State<HKQuranApp> createState() => _HKQuranAppState();
 }
 
-class _NoorAppState extends State<NoorApp> {
+class _HKQuranAppState extends State<HKQuranApp> {
   late Locale _locale;
   late AppThemeMode _themeMode;
 
@@ -45,11 +48,11 @@ class _NoorAppState extends State<NoorApp> {
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
-    final theme = noorTheme(_themeMode.brightness, _themeMode.seed);
+    final theme = hkquranTheme(_themeMode.brightness, _themeMode.seed);
     return AppStateScope(
       state: s,
       child: MaterialApp(
-        title: 'Noor',
+        title: 'HKQuran',
         debugShowCheckedModeBanner: false,
         locale: _locale,
         supportedLocales: const [Locale('en'), Locale('ar')],
@@ -61,14 +64,33 @@ class _NoorAppState extends State<NoorApp> {
         theme: theme,
         darkTheme: theme,
         themeMode: ThemeMode.light,
-        builder: (context, child) => Directionality(
-          textDirection: _locale.languageCode == 'ar'
-              ? TextDirection.rtl
-              : TextDirection.ltr,
-          child: child ?? const SizedBox.shrink(),
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          dragDevices: {
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.touch,
+            PointerDeviceKind.stylus,
+            PointerDeviceKind.unknown,
+            PointerDeviceKind.trackpad,
+          },
         ),
+        builder: (context, child) {
+          Widget current = child ?? const SizedBox.shrink();
+          if (!kIsWeb && Platform.isWindows) {
+            // Prevent Windows embedder crash (0xc0000005 in flutter_windows.dll accessibility_bridge.cc AXTree)
+            current = ExcludeSemantics(child: current);
+          }
+          return Directionality(
+            textDirection: _locale.languageCode == 'ar'
+                ? TextDirection.rtl
+                : TextDirection.ltr,
+            child: current,
+          );
+        },
         home: const HomeScreen(),
       ),
     );
   }
 }
+
+/// Backward compatibility alias
+typedef NoorApp = HKQuranApp;

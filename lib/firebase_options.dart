@@ -50,20 +50,22 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDc3JGs3x--ykfKKm16EFM5UjJEjJ58Wt8',
-    appId: '1:1090465031066:web:48d1dcad048e74e009d023',
-    messagingSenderId: '1090465031066',
-    projectId: 'studio-5996533553-9d4ec',
-    authDomain: 'studio-5996533553-9d4ec.firebaseapp.com',
-    storageBucket: 'studio-5996533553-9d4ec.firebasestorage.app',
+    apiKey: 'AIzaSyBY6vBZrZcsBFRP1sK_kVyN2LfcCVeBCRM',
+    appId: '1:204776724790:web:8222705c7208b3b9a07b97',
+    messagingSenderId: '204776724790',
+    projectId: 'hkquranapp',
+    authDomain: 'hkquranapp.firebaseapp.com',
+    storageBucket: 'hkquranapp.firebasestorage.app',
+    measurementId: 'G-202H59Q3EF',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDc3JGs3x--ykfKKm16EFM5UjJEjJ58Wt8',
-    appId: '1:1090465031066:web:74f8b9514965365209d023',
-    messagingSenderId: '1090465031066',
-    projectId: 'studio-5996533553-9d4ec',
-    authDomain: 'studio-5996533553-9d4ec.firebaseapp.com',
-    storageBucket: 'studio-5996533553-9d4ec.firebasestorage.app',
+    apiKey: 'AIzaSyBY6vBZrZcsBFRP1sK_kVyN2LfcCVeBCRM',
+    appId: '1:204776724790:web:c7cba766be097e20a07b97',
+    messagingSenderId: '204776724790',
+    projectId: 'hkquranapp',
+    authDomain: 'hkquranapp.firebaseapp.com',
+    storageBucket: 'hkquranapp.firebasestorage.app',
+    measurementId: 'G-M16NF5KPXN',
   );
 }

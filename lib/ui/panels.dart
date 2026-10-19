@@ -1,18 +1,23 @@
-import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:url_launcher/url_launcher.dart';
 
-import '../audio/ambient_mixer.dart';
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/palette.dart';
+import 'adhkar_panel.dart';
+import '../audio/reciter_download_service.dart';
+import '../services/desktop_window_service.dart';
+import '../services/notification_service.dart';
 import 'glass.dart';
 
-enum PanelKind { surahs, reciters, ambient, settings }
+enum PanelKind { surahs, reciters, ambient, settings, adhkar }
 
-/// Right-hand glass drawer hosting one of the four panels.
+/// Right-hand glass drawer hosting one of the panels.
 class SidePanel extends StatelessWidget {
   final PanelKind kind;
   final VoidCallback onClose;
@@ -22,9 +27,7 @@ class SidePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final isLight = s.themeMode == AppThemeMode.light;
-    final bg = isLight
-        ? const Color(0xFFF7F7FA)
-        : const Color(0xFF18181B);
+    final bg = isLight ? const Color(0xFFF7F7FA) : const Color(0xFF18181B);
     final size = MediaQuery.sizeOf(context);
     final panelWidth = math.min(372.0, size.width * 0.92);
     return liquid(
@@ -36,8 +39,9 @@ class SidePanel extends StatelessWidget {
         child: switch (kind) {
           PanelKind.surahs => _SurahPanel(onClose: onClose),
           PanelKind.reciters => _ReciterPanel(onClose: onClose),
-          PanelKind.ambient => _AmbientPanel(onClose: onClose),
-          PanelKind.settings => _SettingsPanel(onClose: onClose),
+          PanelKind.ambient => AmbientPanel(onClose: onClose),
+          PanelKind.settings => SettingsPanel(onClose: onClose),
+          PanelKind.adhkar => AdhkarPanel(onClose: onClose),
         },
       ),
     );
@@ -243,11 +247,11 @@ class _ReciterPanel extends StatelessWidget {
                           shape: BoxShape.circle,
                           color: r.id == s.reciterId
                               ? (s.themeMode.brightness == Brightness.light
-                                  ? const Color(0xFFF5E8CF)
-                                  : const Color(0xFF332A1C))
+                                    ? const Color(0xFFF5E8CF)
+                                    : const Color(0xFF332A1C))
                               : (s.themeMode.brightness == Brightness.light
-                                  ? const Color(0xFFE4E4E7)
-                                  : const Color(0xFF27272A)),
+                                    ? const Color(0xFFE4E4E7)
+                                    : const Color(0xFF27272A)),
                         ),
                         child: Icon(
                           Icons.person_rounded,
@@ -304,35 +308,21 @@ class _ReciterPanel extends StatelessWidget {
 
 // --------------------------------------------------------------- ambient
 
-class _AmbientPanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _AmbientPanel({required this.onClose});
-
-  @override
-  State<_AmbientPanel> createState() => _AmbientPanelState();
-}
-
-class _AmbientPanelState extends State<_AmbientPanel> {
-  String _selectedCategory = 'all';
+class AmbientPanel extends StatelessWidget {
+  final VoidCallback? onClose;
+  const AmbientPanel({super.key, this.onClose});
 
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final mixer = s.mixer;
-
-    // Filter channels based on selected category
-    final channelIndices = <int>[];
-    for (var i = 0; i < mixer.channels.length; i++) {
-      if (_selectedCategory == 'all' ||
-          mixer.channels[i].category == _selectedCategory) {
-        channelIndices.add(i);
-      }
-    }
+    final isLight = s.themeMode.brightness == Brightness.light;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Header with active counter and Mute All action
+        // Header
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(
@@ -343,9 +333,9 @@ class _AmbientPanelState extends State<_AmbientPanel> {
                     Text(
                       s.tr('ambient'),
                       style: TextStyle(
-                        fontSize: 19,
+                        fontSize: 18.5,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                        letterSpacing: 0.2,
                         color: s.themeMode.ink,
                       ),
                     ),
@@ -353,22 +343,20 @@ class _AmbientPanelState extends State<_AmbientPanel> {
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2.5,
+                          horizontal: 7,
+                          vertical: 2,
                         ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          color: s.themeMode.accent.withValues(alpha: 0.18),
-                          border: Border.all(
-                            color: s.themeMode.accent.withValues(alpha: 0.35),
-                            width: 0.8,
+                          color: s.themeMode.accent.withValues(
+                            alpha: isLight ? 0.14 : 0.20,
                           ),
                         ),
                         child: Text(
-                          '${mixer.activeCount} ${s.tr('activeSounds')}',
+                          '${mixer.activeCount}',
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
                             color: s.themeMode.accent,
                           ),
                         ),
@@ -378,509 +366,125 @@ class _AmbientPanelState extends State<_AmbientPanel> {
                 ),
               ),
               if (mixer.activeCount > 0)
-                GlassButton(
-                  size: 34,
-                  tooltip: s.tr('muteAll'),
-                  icon: Icon(
-                    Icons.volume_off_rounded,
-                    size: 16,
-                    color: s.themeMode.inkSoft,
-                  ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () {
+                    HapticFeedback.selectionClick();
                     mixer.muteAll();
                     s.saveAmbient();
                   },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      s.tr('muteAll'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: s.themeMode.inkSoft,
+                      ),
+                    ),
+                  ),
                 ),
-              if (mixer.activeCount > 0) const SizedBox(width: 6),
-              GlassButton(
-                size: 34,
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 17,
-                  color: s.themeMode.ink,
-                ),
-                onTap: widget.onClose,
-              ),
             ],
           ),
         ),
 
-        // Master Volume Frosted Card
+        // Master Volume Bar (Clean, integrated, minimal)
         Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          margin: const EdgeInsets.only(bottom: 9),
+          padding: const EdgeInsets.fromLTRB(11, 7, 11, 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(13),
+            color: isLight ? const Color(0xFFF3F4F6) : const Color(0xFF1E1E22),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.10),
+              color: isLight
+                  ? const Color(0xFFE5E7EB)
+                  : const Color(0xFF2A2A30),
               width: 0.8,
             ),
           ),
           child: Row(
             children: [
               GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () {
+                  HapticFeedback.selectionClick();
                   mixer.toggleMasterMute();
                   s.saveAmbient();
                 },
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: mixer.master > 0
-                        ? s.themeMode.accent.withValues(alpha: 0.20)
-                        : Colors.white.withValues(alpha: 0.08),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 2,
                   ),
                   child: Icon(
                     mixer.master == 0
                         ? Icons.volume_off_rounded
                         : (mixer.master < 0.5
-                            ? Icons.volume_down_rounded
-                            : Icons.volume_up_rounded),
-                    size: 17,
+                              ? Icons.volume_down_rounded
+                              : Icons.volume_up_rounded),
+                    size: 18,
                     color: mixer.master > 0
                         ? s.themeMode.accent
-                        : s.themeMode.inkSoft,
+                        : s.themeMode.inkSoft.withValues(alpha: 0.6),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          s.tr('masterVolume'),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: s.themeMode.inkSoft,
-                          ),
-                        ),
-                        Text(
-                          '${(mixer.master * 100).round()}%',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: s.themeMode.ink,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: 3.5,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
-                          elevation: 1,
-                        ),
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 12,
-                        ),
-                        activeTrackColor: s.themeMode.accent,
-                        inactiveTrackColor: Colors.white.withValues(
-                          alpha: 0.12,
-                        ),
-                        thumbColor: s.themeMode.accent,
-                        overlayColor: s.themeMode.accent.withValues(
-                          alpha: 0.15,
-                        ),
-                      ),
-                      child: Slider(
-                        value: mixer.master,
-                        onChanged: (v) {
-                          mixer.setMaster(v);
-                          s.saveAmbient();
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Sync with Quran Reciter (Vibe Mode toggle)
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: mixer.syncWithReciter
-                ? s.themeMode.accent.withValues(alpha: 0.10)
-                : Colors.white.withValues(alpha: 0.04),
-            border: Border.all(
-              color: mixer.syncWithReciter
-                  ? s.themeMode.accent.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.08),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.sync_rounded,
-                size: 16,
-                color: mixer.syncWithReciter
-                    ? s.themeMode.accent
-                    : s.themeMode.inkSoft,
-              ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.tr('syncWithReciter'),
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: s.themeMode.ink,
-                      ),
-                    ),
-                    Text(
-                      s.tr('syncWithReciterDesc'),
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        color: s.themeMode.inkSoft,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Transform.scale(
-                scale: 0.72,
-                child: Switch.adaptive(
-                  value: mixer.syncWithReciter,
-                  activeThumbColor: s.themeMode.accent,
-                  onChanged: (v) => s.setSyncAmbientWithReciter(v),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Soundscapes (Curated Mixes) Section
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                size: 13,
-                color: s.themeMode.accent,
-              ),
-              const SizedBox(width: 5),
               Text(
-                s.tr('soundscapes'),
+                s.tr('masterVolume'),
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+                  fontWeight: FontWeight.w600,
                   color: s.themeMode.inkSoft,
                 ),
               ),
-            ],
-          ),
-        ),
-
-        SizedBox(
-          height: 33,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            itemCount: kAmbientPresets.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 6),
-            itemBuilder: (context, i) {
-              final p = kAmbientPresets[i];
-              final isSelected = mixer.isPresetActive(p);
-              return GestureDetector(
-                onTap: () {
-                  mixer.applyPreset(p);
-                  s.saveAmbient();
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: isSelected
-                        ? s.themeMode.accent.withValues(alpha: 0.24)
-                        : Colors.white.withValues(alpha: 0.07),
-                    border: Border.all(
-                      color: isSelected
-                          ? s.themeMode.accent
-                          : Colors.white.withValues(alpha: 0.12),
-                      width: isSelected ? 1.2 : 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        p.icon,
-                        size: 13,
-                        color: isSelected
-                            ? s.themeMode.accent
-                            : s.themeMode.inkSoft,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        s.ar ? p.ar : p.en,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: isSelected
-                              ? s.themeMode.ink
-                              : s.themeMode.inkSoft,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        // Category Filter Chips
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              for (final cat in [
-                ('all', 'allCategory'),
-                ('water', 'waterCategory'),
-                ('nature', 'natureCategory'),
-                ('sky', 'skyCategory'),
-              ]) ...[
-                GestureDetector(
-                  onTap: () => setState(() => _selectedCategory = cat.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3.5,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: _selectedCategory == cat.$1
-                          ? Colors.white.withValues(alpha: 0.14)
-                          : Colors.transparent,
-                    ),
-                    child: Text(
-                      s.tr(cat.$2),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: _selectedCategory == cat.$1
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                        color: _selectedCategory == cat.$1
-                            ? s.themeMode.ink
-                            : s.themeMode.inkSoft,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-            ],
-          ),
-        ),
-
-        // Channel Cards List
-        Expanded(
-          child: ListView.builder(
-            physics: const BouncingScrollPhysics(),
-            itemCount: channelIndices.length,
-            itemBuilder: (context, i) {
-              return _AmbientSoundCard(index: channelIndices[i]);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AmbientSoundCard extends StatelessWidget {
-  final int index;
-  const _AmbientSoundCard({required this.index});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStateScope.of(context);
-    final mixer = s.mixer;
-    final c = mixer.channels[index];
-
-    final isLight = s.themeMode.brightness == Brightness.light;
-    final activeBg = isLight ? const Color(0xFFFBF4E6) : const Color(0xFF262118);
-    final inactiveBg = isLight ? Colors.white : const Color(0xFF222226);
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.fromLTRB(11, 8, 11, 7),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        color: c.on ? activeBg : inactiveBg,
-        border: Border.all(
-          color: c.on
-              ? s.themeMode.accent
-              : (isLight ? const Color(0xFFE4E4E7) : const Color(0xFF2E2E33)),
-          width: c.on ? 1.1 : 0.8,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isLight ? const Color(0x08000000) : const Color(0x22000000),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Top Row: Icon, Title & Category, Equalizer Wave, Toggle
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  mixer.toggle(index);
-                  s.saveAmbient();
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: c.on
-                        ? (isLight ? const Color(0xFFF5E8CF) : const Color(0xFF332A1C))
-                        : (isLight ? const Color(0xFFF4F4F5) : const Color(0xFF2A2A30)),
-                  ),
-                  child: Icon(
-                    c.icon,
-                    size: 17,
-                    color: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    mixer.toggle(index);
-                    s.saveAmbient();
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.ar ? c.ar : c.en,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: c.on ? FontWeight.w700 : FontWeight.w600,
-                          color: c.on
-                              ? s.themeMode.ink
-                              : s.themeMode.ink.withValues(alpha: 0.65),
-                        ),
-                      ),
-                      Text(
-                        s.tr('${c.category}Category'),
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: s.themeMode.inkSoft.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (c.on) ...[
-                _MiniEqualizer(
-                  playing: c.on && mixer.master > 0,
-                  color: s.themeMode.accent,
-                ),
-                const SizedBox(width: 8),
-              ],
-              _GlassToggle(
-                active: c.on,
-                accentColor: s.themeMode.accent,
-                onTap: () {
-                  mixer.toggle(index);
-                  s.saveAmbient();
-                },
-              ),
-            ],
-          ),
-
-          // Bottom Row: Slider and Level Percentage
-          Row(
-            children: [
-              Icon(
-                c.volume == 0
-                    ? Icons.volume_off_rounded
-                    : (c.volume < 0.5
-                        ? Icons.volume_down_rounded
-                        : Icons.volume_up_rounded),
-                size: 14,
-                color: c.on
-                    ? s.themeMode.accent.withValues(alpha: 0.85)
-                    : s.themeMode.inkSoft.withValues(alpha: 0.4),
-              ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Expanded(
                 child: SliderTheme(
                   data: SliderThemeData(
-                    trackHeight: 2.8,
-                    thumbShape: RoundSliderThumbShape(
-                      enabledThumbRadius: c.on ? 5.5 : 4.5,
-                      elevation: 1,
+                    trackHeight: 3.2,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 5.2,
+                      elevation: 0,
+                      pressedElevation: 1,
                     ),
                     overlayShape: const RoundSliderOverlayShape(
                       overlayRadius: 10,
                     ),
-                    activeTrackColor: c.on
+                    activeTrackColor: s.themeMode.accent,
+                    inactiveTrackColor: isLight
+                        ? const Color(0xFFDFE2E6)
+                        : const Color(0xFF2E2E35),
+                    thumbColor: mixer.master > 0
                         ? s.themeMode.accent
-                        : Colors.white.withValues(alpha: 0.25),
-                    inactiveTrackColor: Colors.white.withValues(alpha: 0.10),
-                    thumbColor: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
-                    overlayColor: s.themeMode.accent.withValues(alpha: 0.15),
+                        : (isLight
+                              ? const Color(0xFF9CA3AF)
+                              : s.themeMode.inkSoft),
+                    overlayColor: s.themeMode.accent.withValues(alpha: 0.12),
                   ),
                   child: Slider(
-                    value: c.volume,
+                    value: mixer.master,
                     onChanged: (v) {
-                      mixer.setVolume(index, v);
+                      mixer.setMaster(v);
                       s.saveAmbient();
                     },
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               SizedBox(
                 width: 32,
                 child: Text(
-                  '${(c.volume * 100).round()}%',
+                  '${(mixer.master * 100).round()}%',
                   textAlign: TextAlign.end,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    color: c.on
+                    color: mixer.master > 0
                         ? s.themeMode.ink
                         : s.themeMode.inkSoft.withValues(alpha: 0.5),
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -889,70 +493,177 @@ class _AmbientSoundCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GlassToggle extends StatelessWidget {
-  final bool active;
-  final Color accentColor;
-  final VoidCallback onTap;
-
-  const _GlassToggle({
-    required this.active,
-    required this.accentColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 36,
-        height: 20,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          color: active
-              ? accentColor
-              : (isLight ? const Color(0xFFD4D4D8) : const Color(0xFF2E2E33)),
-          border: Border.all(
-            color: active
-                ? accentColor
-                : (isLight ? const Color(0xFFC4C4C8) : const Color(0xFF38383E)),
-            width: 1,
-          ),
         ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeInOut,
-          alignment: active
-              ? AlignmentDirectional.centerEnd
-              : AlignmentDirectional.centerStart,
-          child: Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active
-                  ? (isLight ? Colors.white : const Color(0xFF1B1B1D))
-                  : Colors.white,
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
+
+        // Channels List
+        Flexible(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < mixer.channels.length; i++)
+                  _AmbientSoundRow(index: i),
               ],
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _AmbientSoundRow extends StatelessWidget {
+  final int index;
+  const _AmbientSoundRow({required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStateScope.of(context);
+    final mixer = s.mixer;
+    final c = mixer.channels[index];
+
+    final isLight = s.themeMode.brightness == Brightness.light;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      margin: const EdgeInsets.symmetric(vertical: 3.5),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7.5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        color: c.on
+            ? (isLight ? const Color(0xFFFFFFFF) : const Color(0xFF1E1E22))
+            : (isLight ? const Color(0xFFFAFAFC) : const Color(0xFF17171A)),
+        border: Border.all(
+          color: c.on
+              ? (isLight
+                    ? s.themeMode.accent.withValues(alpha: 0.38)
+                    : s.themeMode.accent.withValues(alpha: 0.32))
+              : (isLight ? const Color(0xFFE8E8EC) : const Color(0xFF242428)),
+          width: c.on ? 0.9 : 0.6,
+        ),
+        boxShadow: c.on
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isLight ? 0.04 : 0.16),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          // Left: Tap target to toggle sound
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              mixer.toggle(index);
+              s.saveAmbient();
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(9),
+                    color: c.on
+                        ? s.themeMode.accent.withValues(
+                            alpha: isLight ? 0.15 : 0.22,
+                          )
+                        : (isLight
+                              ? const Color(0xFFF3F4F6)
+                              : const Color(0xFF222226)),
+                  ),
+                  child: Icon(
+                    c.icon,
+                    size: 18,
+                    color: c.on ? s.themeMode.accent : s.themeMode.inkSoft,
+                  ),
+                ),
+                const SizedBox(width: 9),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 104),
+                  child: Text(
+                    s.ar ? c.ar : c.en,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: c.on ? FontWeight.w600 : FontWeight.w500,
+                      color: c.on ? s.themeMode.ink : s.themeMode.inkSoft,
+                    ),
+                  ),
+                ),
+                if (c.on) ...[
+                  const SizedBox(width: 5),
+                  _MiniEqualizer(
+                    playing: c.on && mixer.master > 0,
+                    color: s.themeMode.accent,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // Right: Seamless volume slider + percentage
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3.2,
+                thumbShape: RoundSliderThumbShape(
+                  enabledThumbRadius: c.on ? 5.2 : 4.2,
+                  elevation: 0,
+                  pressedElevation: 1,
+                ),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+                activeTrackColor: c.on
+                    ? s.themeMode.accent
+                    : (isLight
+                          ? const Color(0xFFD1D5DB)
+                          : const Color(0xFF44444C)),
+                inactiveTrackColor: isLight
+                    ? const Color(0xFFE5E7EB)
+                    : const Color(0xFF26262B),
+                thumbColor: c.on
+                    ? s.themeMode.accent
+                    : (isLight
+                          ? const Color(0xFF9CA3AF)
+                          : const Color(0xFF55555C)),
+                overlayColor: s.themeMode.accent.withValues(alpha: 0.12),
+              ),
+              child: Slider(
+                value: c.volume,
+                onChanged: (v) {
+                  mixer.setVolume(index, v);
+                  s.saveAmbient();
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '${(c.volume * 100).round()}%',
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: c.on
+                    ? s.themeMode.ink
+                    : s.themeMode.inkSoft.withValues(alpha: 0.4),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1013,11 +724,7 @@ class _MiniEqualizerState extends State<_MiniEqualizer>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _bar(h1),
-              _bar(h2),
-              _bar(h3),
-            ],
+            children: [_bar(h1), _bar(h2), _bar(h3)],
           ),
         );
       },
@@ -1038,177 +745,797 @@ class _MiniEqualizerState extends State<_MiniEqualizer>
 
 // -------------------------------------------------------------- settings
 
-class _SettingsPanel extends StatefulWidget {
-  final VoidCallback onClose;
-  const _SettingsPanel({required this.onClose});
+class SettingsPanel extends StatefulWidget {
+  final VoidCallback? onClose;
+  const SettingsPanel({super.key, this.onClose});
 
   @override
-  State<_SettingsPanel> createState() => _SettingsPanelState();
+  State<SettingsPanel> createState() => _SettingsPanelState();
 }
 
-class _SettingsPanelState extends State<_SettingsPanel> {
-  Map<String, dynamic>? credits;
+class _SettingsPanelState extends State<SettingsPanel> {
+  Future<void> _openUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('Error launching $url: $e');
+    }
+  }
 
-  @override
-  void initState() {
-    super.initState();
-    rootBundle
-        .loadString('assets/bg/credits.json')
-        .then((v) {
-          if (mounted) {
-            setState(() => credits = jsonDecode(v) as Map<String, dynamic>);
-          }
-        })
-        .catchError((_) {});
+  static double _nearestScale(double current) {
+    const scales = [0.9, 1.0, 1.18, 1.32];
+    double closest = scales.first;
+    double minDiff = (current - closest).abs();
+    for (final s in scales) {
+      final diff = (current - s).abs();
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = s;
+      }
+    }
+    return closest;
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
     final mode = s.themeMode;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _PanelHeader(title: s.tr('settings'), onClose: widget.onClose),
-        Expanded(
-          child: ListView(
-            children: [
-              _SectionLabel(s.tr('language')),
-              Row(
-                children: [
-                  for (final (code, label) in const [
-                    ('en', 'English'),
-                    ('ar', 'العربية'),
-                  ])
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 8),
-                      child: ChoiceChip(
-                        selected: s.locale.languageCode == code,
-                        selectedColor: mode.accent.withValues(alpha: 0.3),
-                        label: Text(
-                          label,
-                          style: TextStyle(fontSize: 13, color: mode.ink),
+    final isLight = mode == AppThemeMode.light;
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ---- Official Brand Header ----
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isLight ? Colors.white : const Color(0xFF1E2D2B),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: isLight
+                          ? const Color(0x18000000)
+                          : const Color(0x33F59E0B),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isLight ? 0.04 : 0.25,
                         ),
-                        onSelected: (_) => s.setLocale(Locale(code)),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.all(5.0),
+                    child: Image.asset(
+                      'assets/logo/hkquran_emblem_transparent.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Image.asset(
+                        'assets/logo/hkquran_app_icon.png',
+                        fit: BoxFit.contain,
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              _SectionLabel(s.tr('watchfaces')),
-              GridView.count(
-                crossAxisCount: 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.35,
-                children: [
-                  for (var i = 0; i < kWatchfaces.length; i++)
-                    _WatchfaceTile(
-                      watchface: kWatchfaces[i],
-                      isSelected: i == s.watchface,
-                      onTap: () => s.setWatchface(i),
-                      isAr: s.ar,
-                      accent: mode.accent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    s.ar
+                        ? 'مصحف الحكيم (“HK-Quran”) — تجربة هادئة ونقية لقراءة وتدبر القرآن الكريم.'
+                        : 'HK-Quran (“Zero Noise”) is a calm, minimalist sanctuary for daily Quran focus.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                      color: mode.ink,
+                      letterSpacing: -0.2,
                     ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: s.showTranslation,
-                activeThumbColor: mode.accent,
-                title: Text(
-                  s.tr('translation'),
-                  style: TextStyle(fontSize: 14, color: mode.ink),
+                  ),
                 ),
-                onChanged: (_) => s.toggleTranslation(),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: s.autoAdvance,
-                activeThumbColor: mode.accent,
-                title: Text(
-                  s.tr('autoAdvance'),
-                  style: TextStyle(fontSize: 14, color: mode.ink),
-                ),
-                onChanged: (_) => s.toggleAutoAdvance(),
-              ),
-              const SizedBox(height: 18),
-              _SectionLabel(s.tr('arabicScale')),
-              Row(
-                children: [
-                  for (final (scale, label) in const [
-                    (0.9, 'Small'),
-                    (1.0, 'Normal'),
-                    (1.18, 'Large'),
-                    (1.32, 'Extra'),
-                  ])
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 8),
-                      child: ChoiceChip(
-                        selected: (s.arabicTextScale - scale).abs() < 0.06,
-                        selectedColor: mode.accent.withValues(alpha: 0.3),
-                        label: Text(
-                          label,
-                          style: TextStyle(fontSize: 12, color: mode.ink),
-                        ),
-                        onSelected: (_) => s.setArabicTextScale(scale),
+                if (widget.onClose != null) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: widget.onClose,
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: isLight
+                            ? const Color(0xFF71717A)
+                            : const Color(0xFFA1A1AA),
                       ),
                     ),
+                  ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            s.ar
+                ? 'صُمم بتصميم هادئ وخلوّ من التشتيت مع تلاوات خاشعة وتنبيهات أذكار وأوقات الصلاة.'
+                : 'Designed around calm software and mindful living, with serene recitations, peaceful typography, and offline prayers.',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              height: 1.5,
+              color: isLight
+                  ? const Color(0xFF71717A)
+                  : const Color(0xFFA1A1AA),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: isLight
+                  ? const Color(0x12000000)
+                  : const Color(0x1FFFFFFF),
+            ),
+          ),
+
+          // ---- Language selector ----
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  s.tr('language'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: mode.ink,
+                  ),
+                ),
+                const Spacer(),
+                _MinimalPill(
+                  options: const [('en', 'English'), ('ar', 'العربية')],
+                  selected: s.locale.languageCode,
+                  onSelect: (code) => s.setLocale(Locale(code)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+
+          // ---- Translation toggle ----
+          _MinimalToggleRow(
+            label: s.tr('translation'),
+            subtitle: s.ar
+                ? 'عرض معاني الآيات باللغة الإنجليزية'
+                : 'Show English verse translation',
+            value: s.showTranslation,
+            onChanged: (val) => s.setTranslation(val),
+          ),
+
+          // ---- Auto advance toggle ----
+          _MinimalToggleRow(
+            label: s.tr('autoAdvance'),
+            value: s.autoAdvance,
+            onChanged: (_) => s.toggleAutoAdvance(),
+          ),
+
+          // ---- Arabic text size ----
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  s.tr('arabicScale'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: mode.ink,
+                  ),
+                ),
+                const Spacer(),
+                _MinimalPill(
+                  options: const [
+                    ('0.9', 'S'),
+                    ('1.0', 'M'),
+                    ('1.18', 'L'),
+                    ('1.32', 'XL'),
+                  ],
+                  selected: _nearestScale(s.arabicTextScale).toString(),
+                  onSelect: (val) => s.setArabicTextScale(double.parse(val)),
+                ),
+              ],
+            ),
+          ),
+
+          if (!kIsWeb) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: isLight
+                    ? const Color(0x12000000)
+                    : const Color(0x1FFFFFFF),
               ),
-              const SizedBox(height: 18),
-              _SectionLabel(s.tr('credits')),
-              if (credits != null)
-                for (final e in (credits as Map).values)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+            ),
+
+            // Prayer location row
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${e['label']} — ${(e['artist'] ?? '').toString().trim().isEmpty ? 'unknown' : e['artist']}',
-                          style: TextStyle(fontSize: 12, color: mode.ink),
+                          s.prayerService.cityName.isEmpty
+                              ? (s.ar ? 'مواقيت الصلاة' : 'Prayer Times')
+                              : '${s.prayerService.cityName}, ${s.prayerService.countryName}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                            color: mode.ink,
+                          ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
-                          '${e['license']} • Wikimedia Commons',
-                          style: TextStyle(fontSize: 11, color: mode.inkSoft),
+                          s.ar
+                              ? 'تلقائي بناءً على موقعك'
+                              : 'Based on local coordinates',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isLight
+                                ? const Color(0xFF71717A)
+                                : const Color(0xFFA1A1AA),
+                          ),
                         ),
                       ],
                     ),
                   ),
-              const SizedBox(height: 10),
-              Text(
-                'Noor — recitation by quran.com, text & translation © their respective authors. Font: Amiri Quran (OFL).',
-                style: TextStyle(fontSize: 11, color: mode.inkSoft),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      s.prayerService.autoDetectLocation();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isLight
+                            ? const Color(0xFFF4F4F5)
+                            : const Color(0xFF27272A),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.my_location_rounded,
+                            size: 12,
+                            color: mode.accent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            s.ar ? 'تحديث' : 'Locate',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: mode.accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Adhan Sound alert
+            _MinimalToggleRow(
+              label: s.ar ? 'أذان الصلاة' : 'Adhan Sound Alert',
+              subtitle: s.ar
+                  ? 'تنبيه صوتي عند دخول الوقت'
+                  : 'Plays adhan sound at prayer times',
+              value: s.prayerService.adhanSoundEnabled,
+              onChanged: (val) => s.prayerService.toggleAdhanSound(val),
+            ),
+
+            // Dhikr notifications
+            _MinimalToggleRow(
+              label: s.ar ? 'إشعارات الأذكار' : 'Dhikr Notifications',
+              subtitle: s.ar
+                  ? 'تنبيهات ويندوز دورية في الزاوية'
+                  : 'Periodic toast alerts on desktop',
+              value: NotificationService.instance.enabled,
+              onChanged: (v) {
+                setState(() {});
+                NotificationService.instance.setEnabled(v);
+              },
+            ),
+
+            if (NotificationService.instance.enabled) ...[
+              // Interval selector
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            s.ar ? 'تكرار الأذكار' : 'Notification Frequency',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: mode.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            s.ar
+                                ? 'الفترة بين كل ذكر وآخر'
+                                : 'How often reminders appear',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isLight
+                                  ? const Color(0xFF71717A)
+                                  : const Color(0xFFA1A1AA),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _MinimalPill(
+                      options: [
+                        ('10', s.ar ? '10 د' : '10m'),
+                        ('15', s.ar ? '15 د' : '15m'),
+                        ('20', s.ar ? '20 د' : '20m'),
+                        ('30', s.ar ? '30 د' : '30m'),
+                        ('60', s.ar ? '1 س' : '1h'),
+                      ],
+                      selected: NotificationService.instance.intervalMinutes
+                          .toString(),
+                      onSelect: (val) {
+                        NotificationService.instance
+                            .setIntervalMinutes(int.parse(val));
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              // Sound alert toggle ("not so annoying": silent by default)
+              _MinimalToggleRow(
+                label: s.ar ? 'صوت التنبيه' : 'Notification Sound',
+                subtitle: s.ar
+                    ? (NotificationService.instance.soundEnabled
+                        ? 'تنبيه بصوت ويندوز'
+                        : 'إشعار صامت هادئ وبدون إزعاج')
+                    : (NotificationService.instance.soundEnabled
+                        ? 'Play Windows alert chime'
+                        : 'Silent toast, calm & non-intrusive'),
+                value: NotificationService.instance.soundEnabled,
+                onChanged: (val) {
+                  NotificationService.instance.setSoundEnabled(val);
+                  setState(() {});
+                },
+              ),
+
+              // Test notification button
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            s.ar ? 'تجربة إشعار الأذكار' : 'Test Dhikr Alert',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: mode.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            s.ar
+                                ? 'إرسال إشعار فوري للتأكد من المظهر'
+                                : 'Send an immediate desktop notification',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isLight
+                                  ? const Color(0xFF71717A)
+                                  : const Color(0xFFA1A1AA),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        await NotificationService.instance
+                            .showNextDhikrNotification(force: true);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                s.ar
+                                    ? 'تم إرسال إشعار ذكر إلى سطح المكتب'
+                                    : 'Sent dhikr notification to desktop',
+                              ),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isLight
+                              ? const Color(0xFFF4F4F5)
+                              : const Color(0xFF27272A),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.notifications_active_outlined,
+                              size: 12,
+                              color: mode.accent,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              s.ar ? 'تجربة الآن' : 'Test now',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: mode.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
+
+            // Windows Startup
+            _MinimalToggleRow(
+              label: s.ar ? 'بدء التشغيل مع ويندوز' : 'Start with Windows',
+              subtitle: s.ar
+                  ? 'يبدأ مصغراً بهدوء'
+                  : 'Starts minimized in background',
+              value: DesktopWindowService.instance.startAtStartup,
+              onChanged: (val) async {
+                await DesktopWindowService.instance.setStartAtStartup(val);
+                setState(() {});
+              },
+            ),
+
+            // Minimize to Tray
+            _MinimalToggleRow(
+              label: s.ar
+                  ? 'تصغير إلى شريط المهام'
+                  : 'Minimize to Tray on Close',
+              value: DesktopWindowService.instance.closeToTray,
+              onChanged: (val) {
+                DesktopWindowService.instance.setCloseToTray(val);
+                setState(() {});
+              },
+            ),
+          ],
+
+          // ---- Action links (matching Zeno reference layout) ----
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(
+              height: 1,
+              thickness: 1,
+              color: isLight
+                  ? const Color(0x12000000)
+                  : const Color(0x1FFFFFFF),
+            ),
           ),
-        ),
-      ],
+
+          _CleanLinkRow(
+            label: s.ar ? 'زيارة موقع المطور →' : 'Explore website & apps →',
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _openUrl('https://salaheddineken.com');
+            },
+          ),
+          _CleanLinkRow(
+            label: s.ar
+                ? 'مشروع جيت هاب مفتوح المصدر →'
+                : 'Follow GitHub project →',
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _openUrl('https://github.com/SalahEddineken');
+            },
+          ),
+          if (kIsWeb)
+            _CleanLinkRow(
+              label: s.ar
+                  ? 'تحميل تطبيق سطح المكتب (Windows) →'
+                  : 'Download desktop app (Windows) →',
+              onTap: () {
+                HapticFeedback.lightImpact();
+                _openUrl('https://github.com/SalahEddineken/Quran/releases/latest');
+              },
+            ),
+
+          if (!kIsWeb)
+            FutureBuilder<int>(
+              future: ReciterDownloadService.instance.getTotalStorageBytes(),
+              builder: (context, snapshot) {
+                final bytes = snapshot.data ?? 0;
+                if (bytes <= 0) return const SizedBox.shrink();
+                final formatted = ReciterDownloadService.instance.formatBytes(
+                  bytes,
+                );
+                return _CleanLinkRow(
+                  label: s.ar
+                      ? 'مسح التلاوات المحملة ($formatted) →'
+                      : 'Clear downloaded audio ($formatted) →',
+                  isDestructive: true,
+                  onTap: () async {
+                    HapticFeedback.mediumImpact();
+                    for (final r in kReciters) {
+                      await ReciterDownloadService.instance.deleteReciterAudio(
+                        r.id,
+                      );
+                    }
+                    setState(() {});
+                  },
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
+class _CleanLinkRow extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _CleanLinkRow({
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  State<_CleanLinkRow> createState() => _CleanLinkRowState();
+}
+
+class _CleanLinkRowState extends State<_CleanLinkRow> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          letterSpacing: 1.4,
-          fontWeight: FontWeight.w700,
-          color: s.themeMode.inkSoft,
+    final isLight = s.themeMode == AppThemeMode.light;
+    final baseColor = widget.isDestructive ? Colors.redAccent : s.themeMode.ink;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: _hovered
+                        ? (widget.isDestructive
+                              ? Colors.red
+                              : s.themeMode.accent)
+                        : baseColor,
+                  ),
+                ),
+              ),
+              AnimatedSlide(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                offset: _hovered ? Offset(s.ar ? -0.15 : 0.15, 0) : Offset.zero,
+                child: Icon(
+                  s.ar ? Icons.arrow_back_rounded : Icons.arrow_forward_rounded,
+                  size: 15,
+                  color: _hovered
+                      ? (widget.isDestructive ? Colors.red : s.themeMode.accent)
+                      : (isLight
+                            ? const Color(0xFF71717A)
+                            : const Color(0xFFA1A1AA)),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _MinimalToggleRow extends StatelessWidget {
+  final String label;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _MinimalToggleRow({
+    required this.label,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStateScope.of(context);
+    final mode = s.themeMode;
+    final isLight = mode == AppThemeMode.light;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: mode.ink,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isLight
+                          ? const Color(0xFF71717A)
+                          : const Color(0xFFA1A1AA),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Transform.scale(
+            scale: 0.75,
+            child: CupertinoSwitch(
+              value: value,
+              activeTrackColor: mode.accent,
+              inactiveTrackColor: isLight
+                  ? const Color(0xFFE4E4E7)
+                  : const Color(0xFF2E2E34),
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MinimalPill extends StatelessWidget {
+  final List<(String, String)> options;
+  final String selected;
+  final ValueChanged<String> onSelect;
+
+  const _MinimalPill({
+    required this.options,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStateScope.of(context);
+    final isLight = s.themeMode == AppThemeMode.light;
+
+    return Container(
+      height: 26,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF4F4F5) : const Color(0xFF27272A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (value, label) in options)
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onSelect(value);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: selected == value
+                      ? (isLight ? Colors.white : const Color(0xFF3F3F46))
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: selected == value
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: selected == value
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                    color: selected == value
+                        ? s.themeMode.ink
+                        : (isLight
+                              ? const Color(0xFF71717A)
+                              : const Color(0xFFA1A1AA)),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1274,10 +1601,7 @@ class _NumberBadge extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: accent.withValues(alpha: 0.16),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.35),
-          width: 1,
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1),
       ),
       child: Center(
         child: Text(
@@ -1293,152 +1617,3 @@ class _NumberBadge extends StatelessWidget {
     );
   }
 }
-
-class _WatchfaceTile extends StatelessWidget {
-  final Watchface watchface;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final bool isAr;
-  final Color accent;
-
-  const _WatchfaceTile({
-    required this.watchface,
-    required this.isSelected,
-    required this.onTap,
-    required this.isAr,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final title = watchface.name(isAr);
-
-    Widget content;
-    Color? tileBg;
-    Border border;
-
-    if (watchface.isWhite) {
-      tileBg = const Color(0xFFFAFAFA);
-      border = Border.all(
-        color: isSelected ? accent : const Color(0xFFD4D4D8),
-        width: isSelected ? 2.2 : 1.0,
-      );
-      content = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.light_mode_rounded,
-            size: 20,
-            color: isSelected ? accent : const Color(0xFF1E1E22),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? accent : const Color(0xFF1E1E22),
-            ),
-          ),
-        ],
-      );
-    } else if (watchface.isBlack) {
-      tileBg = const Color(0xFF0F0F12);
-      border = Border.all(
-        color: isSelected ? accent : const Color(0xFF333338),
-        width: isSelected ? 2.2 : 1.0,
-      );
-      content = Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.dark_mode_rounded,
-            size: 20,
-            color: isSelected ? accent : Colors.white,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? accent : Colors.white,
-            ),
-          ),
-        ],
-      );
-    } else {
-      border = Border.all(
-        color: isSelected ? accent : Colors.white.withValues(alpha: 0.18),
-        width: isSelected ? 2.2 : 1.0,
-      );
-      content = Stack(
-        fit: StackFit.expand,
-        children: [
-          if (watchface.asset != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: Image.asset(
-                watchface.asset!,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x10000000), Color(0x99000000)],
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 6,
-            left: 4,
-            right: 4,
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? accent : Colors.white,
-                shadows: const [
-                  Shadow(color: Colors.black, blurRadius: 4),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: tileBg,
-          borderRadius: BorderRadius.circular(14),
-          border: border,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: content,
-      ),
-    );
-  }
-}
-

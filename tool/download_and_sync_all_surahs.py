@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NOOR QURAN - Automated Quran Recitations Downloader & Compressor
+HKQURAN - Automated Quran Recitations Downloader & Compressor
 Downloads, compresses, and synchronizes audio for the top 6 most listened Quran reciters:
 1. Mishary Rashid Alafasy (id: 7)
 2. Mahmoud Khalil Al-Husary (id: 6)
@@ -117,7 +117,7 @@ def ensure_folders():
     TIMINGS_DIR.mkdir(parents=True, exist_ok=True)
 
 def fetch_json(url, retries=3):
-    req = urllib.request.Request(url, headers={'User-Agent': 'NoorApp/1.0 (Mozilla/5.0)'})
+    req = urllib.request.Request(url, headers={'User-Agent': 'HKQuranApp/1.0 (Mozilla/5.0)'})
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
@@ -189,7 +189,7 @@ def download_and_compress_audio(reciter_id, chapter, url, dest_file, bitrate="48
 
     try:
         # 1. Download
-        req = urllib.request.Request(url, headers={'User-Agent': 'NoorApp/1.0'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'HKQuranApp/1.0'})
         with urllib.request.urlopen(req, timeout=40) as resp, open(tmp_in_path, 'wb') as out_f:
             shutil.copyfileobj(resp, out_f)
 
@@ -301,7 +301,7 @@ def main():
             jobs.append((r["id"], r["name"], ch, r["url_template"], r["folder"], args.bitrate))
 
     print("=" * 68)
-    print("NOOR QURAN — Downloader & FFmpeg Compressor")
+    print("HKQURAN — Downloader & FFmpeg Compressor")
     print(f"Reciters: {[r['name'] for r in reciters_to_run]}")
     print(f"Chapters: {len(target_chapters)} ({target_chapters[0]}..{target_chapters[-1]})")
     print(f"Total jobs: {len(jobs)} audio files")

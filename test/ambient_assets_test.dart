@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noor/audio/ambient_mixer.dart';
+import 'package:hkquran/audio/ambient_mixer.dart';
 
 void main() {
   test('all 10 ambient sound MP3 assets exist on disk and have valid sizes', () {

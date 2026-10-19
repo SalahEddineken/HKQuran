@@ -71,6 +71,12 @@ const List<Watchface> kWatchfaces = [
   ),
   Watchface(
     kind: WatchfaceKind.image,
+    asset: 'assets/bg/Background-3.png',
+    nameEn: 'Mountains',
+    nameAr: 'جبال',
+  ),
+  Watchface(
+    kind: WatchfaceKind.image,
     asset: 'assets/bg/bg1.jpg',
     nameEn: 'Mosque',
     nameAr: 'مسجد',

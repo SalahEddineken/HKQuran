@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noor/data/local_quran_data.dart';
-import 'package:noor/data/models.dart';
-import 'package:noor/data/quran_api.dart';
+import 'package:hkquran/data/local_quran_data.dart';
+import 'package:hkquran/data/models.dart';
+import 'package:hkquran/data/quran_api.dart';
 
 void main() {
   test('Local Quran verses are loaded directly from source code', () {

@@ -1,5 +1,5 @@
-name: noor
-description: "Noor — an immersive Quran player with reciters, karaoke ayah display, ambient sound mixer and a clean, high-performance interface."
+name: hkquran
+description: "HKQuran — an immersive Quran player with reciters, karaoke ayah display, ambient sound mixer and a clean, high-performance interface."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -46,6 +46,14 @@ dependencies:
   firebase_core: ^4.15.0
   cloud_firestore: ^6.10.0
   just_audio_windows: ^0.2.3
+  adhan: ^2.0.0
+  path_provider: ^2.1.5
+  window_manager: ^0.4.3
+  tray_manager: ^0.2.4
+  local_notifier: ^0.1.6
+  launch_at_startup: ^0.4.0
+  package_info_plus: ^8.0.0
+  url_launcher: ^6.3.3
 
 dependency_overrides:
   # Real package is only needed for iOS/macOS (via just_audio →
@@ -54,6 +62,8 @@ dependency_overrides:
   # `flutter test` even on web projects. Stub keeps resolution happy.
   objective_c:
     path: tool/objective_c_stub
+  path_provider_foundation:
+    path: tool/path_provider_foundation_stub
 
 dev_dependencies:
   flutter_test:
@@ -84,6 +94,9 @@ flutter:
     - assets/quran/surahs/
     - assets/quran/timings/
     - assets/audio/
+    - assets/Surahs logo/
+    - assets/reciters/
+    - assets/logo/
 
   fonts:
     - family: UthmanicHafs

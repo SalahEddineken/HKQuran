@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noor/data/firebase_quran_service.dart';
-import 'package:noor/data/quran_database.dart';
+import 'package:hkquran/data/firebase_quran_service.dart';
+import 'package:hkquran/data/quran_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

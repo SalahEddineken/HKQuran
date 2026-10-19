@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.noor" "\0"
-            VALUE "FileDescription", "noor" "\0"
+            VALUE "CompanyName", "com.hkquran" "\0"
+            VALUE "FileDescription", "HKQuran" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "noor" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.noor. All rights reserved." "\0"
-            VALUE "OriginalFilename", "noor.exe" "\0"
-            VALUE "ProductName", "noor" "\0"
+            VALUE "InternalName", "hkquran" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.hkquran. All rights reserved." "\0"
+            VALUE "OriginalFilename", "hkquran.exe" "\0"
+            VALUE "ProductName", "HKQuran" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

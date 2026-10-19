@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../data/models.dart';
 import '../state/app_state.dart';
 import '../theme/palette.dart';
 import 'background.dart';
 import 'glass.dart';
-import 'vibe_hud.dart';
 
 /// Full reading view of the loaded surah — every ayah on its own glass row,
 /// the playing ayah highlighted, tap any ayah to jump there.
@@ -127,25 +125,6 @@ class _ReaderPageState extends State<ReaderPage> {
                       SizedBox(width: isSmall ? 8 : 12),
                       GlassButton(
                         size: isSmall ? 36 : 44,
-                        color: s.mixer.activeCount > 0
-                            ? mode.accent.withValues(alpha: 0.22)
-                            : Colors.transparent,
-                        icon: Icon(
-                          Icons.auto_awesome_rounded,
-                          size: isSmall ? 17 : 20,
-                          color: s.mixer.activeCount > 0
-                              ? mode.accent
-                              : mode.inkSoft,
-                        ),
-                        tooltip: s.tr('vibeQuran'),
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          _showVibeSheet(context);
-                        },
-                      ),
-                      SizedBox(width: isSmall ? 6 : 8),
-                      GlassButton(
-                        size: isSmall ? 36 : 44,
                         icon: Icon(
                           Icons.graphic_eq_rounded,
                           size: isSmall ? 17 : 20,
@@ -192,29 +171,6 @@ class _ReaderPageState extends State<ReaderPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showVibeSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black38,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(ctx).bottom + 12,
-          left: 12,
-          right: 12,
-        ),
-        child: SafeArea(
-          top: false,
-          child: VibeHudCard(
-            isBottomSheet: true,
-            onClose: () => Navigator.of(ctx).pop(),
-          ),
-        ),
       ),
     );
   }

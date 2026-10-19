@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../data/models.dart';
 import '../data/quran_api.dart';
+import 'reciter_download_service.dart';
 
 enum PlayerStatus { idle, loading, ready, error }
 
@@ -239,8 +240,20 @@ class ChapterPlayer extends ChangeNotifier {
     }
   }
 
-  /// Sets audio source supporting Flutter asset bundles with remote fallback.
+  /// Sets audio source supporting local downloaded files, assets, with remote CDN fallback.
   Future<void> _setAudioSource(String url, int rId, int ch) async {
+    // 1. Check if user downloaded this surah locally
+    final localDownloaded =
+        ReciterDownloadService.instance.getDownloadedPath(rId, ch);
+    if (localDownloaded != null) {
+      try {
+        await _player.setFilePath(localDownloaded, preload: true);
+        return;
+      } catch (e) {
+        debugPrint('Failed to load local downloaded file: $e');
+      }
+    }
+
     final reciter = reciterById(rId);
     final remote = reciter.remoteAudioUrl(ch);
 
@@ -253,14 +266,14 @@ class ChapterPlayer extends ChangeNotifier {
       return;
     }
 
-    if (url.startsWith('assets/')) {
+    // 2. If it's Mishary Rashid Alafasy (id 7) or an asset
+    if (rId == 7 && url.startsWith('assets/')) {
       try {
         await _player
             .setAsset(url, preload: true)
             .timeout(const Duration(seconds: 5));
         return;
       } catch (_) {
-        // Fallback to remote CDN if local asset is not on disk yet or fails
         if (remote != null) {
           await _player
               .setAudioSource(
@@ -273,6 +286,16 @@ class ChapterPlayer extends ChangeNotifier {
         rethrow;
       }
     } else {
+      // 3. For other reciters, stream directly from high quality remote CDN
+      if (remote != null) {
+        await _player
+            .setAudioSource(
+              AudioSource.uri(Uri.parse(remote)),
+              preload: true,
+            )
+            .timeout(const Duration(seconds: 8));
+        return;
+      }
       await _player
           .setAudioSource(
             AudioSource.uri(Uri.parse(url)),

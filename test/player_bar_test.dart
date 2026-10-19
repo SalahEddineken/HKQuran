@@ -2,8 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:noor/state/app_state.dart';
-import 'package:noor/ui/player_bar.dart';
+import 'package:hkquran/state/app_state.dart';
+import 'package:hkquran/ui/player_bar.dart';
 
 void main() {
   testWidgets('PlayerBar uses spinning vinyl as play/pause button and has no repeat or speed buttons', (tester) async {
@@ -24,9 +24,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Repeat toggle chip is in the player bar title
-    expect(find.byIcon(Icons.repeat_rounded), findsOneWidget);
-    expect(find.text('1x'), findsOneWidget);
+    // Repeat toggle chip is removed from the player bar
+    expect(find.byIcon(Icons.repeat_rounded), findsNothing);
 
     // No play/pause icons on the disk or transport — pure spinning motion indicates state
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);

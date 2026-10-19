@@ -7,14 +7,10 @@ import '../state/app_state.dart';
 import '../theme/palette.dart';
 import 'glass.dart';
 
-/// The centerpiece — a clean analog clock based on Benjamin Kao's design
-/// (60 precision perimeter tick marks with prominent quarter markers, classic
-/// baton hands with drop shadows), with integrated focus
-/// session countdown and interaction:
-/// * Idle: real local time with hour and minute hands.
-/// * Drag anywhere on the dial to set a focus session (0–60 min), then
-///   release to start it — minute hand indicates the remaining focus time
-///   while the hour hand keeps real local time, framed by a smooth focus ring.
+/// The centerpiece — an ultra-minimalist analog clock:
+/// * Thin outer perimeter ring with 12 subtle radial hour ticks.
+/// * Clean linear hour and minute hands originating from a solid center dot.
+/// * Real local time or countdown mode during focus sessions.
 class ClockView extends StatefulWidget {
   final bool interactive;
   const ClockView({super.key, this.interactive = true});
@@ -32,7 +28,7 @@ class _ClockViewState extends State<ClockView> {
   @override
   void initState() {
     super.initState();
-    // Ticks every 500ms to stay in sync with seconds and smooth countdowns
+    // Ticks every 500ms to stay in sync with time and focus countdown
     _ticker = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (mounted) {
         setState(() {});
@@ -78,18 +74,9 @@ class _ClockViewState extends State<ClockView> {
     final ink = mode.ink;
     final focusing = s.focusing;
 
-    // Dial and hands colors
-    final Color tickColor = isDark ? Colors.white : const Color(0xFF282A30);
-    final Color minuteTickColor =
-        isDark ? const Color(0x66FFFFFF) : const Color(0xFF868A94);
-
-    final Color hourHandColor =
-        isDark ? Colors.white : const Color(0xFF1B1C20);
-    final Color minuteHandColor =
-        isDark ? const Color(0xFFE2E4E8) : const Color(0xFF2C2E34);
-    final Color centerDotColor = mode.accent;
-    final Color handShadowColor =
-        isDark ? const Color(0x80000000) : const Color(0x40000000);
+    // Minimalist monochrome palette matching the reference watchface
+    final Color handColor = isDark ? Colors.white : const Color(0xFF111111);
+    final Color dialColor = isDark ? Colors.white : const Color(0xFF111111);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -104,9 +91,9 @@ class _ClockViewState extends State<ClockView> {
         // Dial sizing: sized to fit as an elegant centerpiece
         final double maxDial;
         if (isTinyScreen) {
-          maxDial = 180.0;
+          maxDial = 160.0;
         } else if (isMobile) {
-          maxDial = (screenWidth * 0.68).clamp(200.0, 270.0);
+          maxDial = (screenWidth * 0.58).clamp(170.0, 230.0);
         } else if (isLargeDesktop) {
           maxDial = 360.0;
         } else if (isDesktop) {
@@ -114,8 +101,9 @@ class _ClockViewState extends State<ClockView> {
         } else {
           maxDial = 290.0;
         }
-        final heightCappedDial = math.min(maxDial, screenHeight * 0.42);
-        final minDial = isTinyScreen ? 120.0 : (isMobile ? 180.0 : 210.0);
+        final heightCappedDial =
+            math.min(maxDial, screenHeight * (isMobile ? 0.35 : 0.42));
+        final minDial = isTinyScreen ? 120.0 : (isMobile ? 150.0 : 210.0);
         final size =
             math.min(box.maxWidth, heightCappedDial).clamp(minDial, maxDial);
 
@@ -140,174 +128,147 @@ class _ClockViewState extends State<ClockView> {
               onPanStart: (_) {},
               onPanUpdate: (d) => _dragUpdate(d.localPosition, Size(size, size)),
               onPanEnd: (_) => _dragEnd(Size(size, size)),
-            onTap: () {
-              final now = DateTime.now();
-              if (focusing &&
-                  _lastTap != null &&
-                  now.difference(_lastTap!) < const Duration(milliseconds: 320)) {
-                s.endFocus();
-                _lastTap = null;
-                return;
-              }
-              _lastTap = now;
-            },
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  // Transparent Clock Body Container
-                  SizedBox(
-                    width: size,
-                    height: size,
-                    child: Padding(
-                      padding: EdgeInsets.all(facePadding),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // Dial Face (Ticks) - Cached layer
-                          RepaintBoundary(
-                            child: CustomPaint(
-                              painter: ClockDialPainter(
-                                tickColor: tickColor,
-                                minuteTickColor: minuteTickColor,
+              onTap: () {
+                final now = DateTime.now();
+                if (focusing &&
+                    _lastTap != null &&
+                    now.difference(_lastTap!) < const Duration(milliseconds: 320)) {
+                  s.endFocus();
+                  _lastTap = null;
+                  return;
+                }
+                _lastTap = now;
+              },
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Transparent Clock Dial Container
+                    SizedBox(
+                      width: size,
+                      height: size,
+                      child: Padding(
+                        padding: EdgeInsets.all(facePadding),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Outer ring + 12 radial hour ticks - Cached layer
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                painter: ClockDialPainter(
+                                  color: dialColor,
+                                  isDark: isDark,
+                                ),
                               ),
                             ),
-                          ),
-                          // Hands layer (Hour, Minute, Center Pivot)
-                          RepaintBoundary(
-                            child: CustomPaint(
-                              painter: ClockHandsPainter(
-                                time: clockFn(),
-                                hourHandColor: hourHandColor,
-                                minuteHandColor: minuteHandColor,
-                                centerDotColor: centerDotColor,
-                                shadowColor: handShadowColor,
+                            // Hands layer (Hour, Minute, Solid Center Dot)
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                painter: ClockHandsPainter(
+                                  time: clockFn(),
+                                  handColor: handColor,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Focus Countdown Ring
-                  if (focusing)
-                    RepaintBoundary(
-                      child: CustomPaint(
-                        size: Size(size + 36, size + 36),
-                        painter: _FocusRingPainter(
-                          fraction: s.focusRemaining.inSeconds /
-                              (s.focusPreviewMinutes * 60).clamp(1, 3600),
-                          color: mode.accent,
+                          ],
                         ),
                       ),
                     ),
 
-                  // Drag Preview Hand
-                  if (_dragMinutes != null)
-                    RepaintBoundary(
-                      child: CustomPaint(
-                        size: Size(size, size),
-                        painter: _PreviewHandPainter(
-                          minutes: _dragMinutes!,
-                          color: mode.accent,
+                    // Focus Countdown Ring
+                    if (focusing)
+                      RepaintBoundary(
+                        child: CustomPaint(
+                          size: Size(size + 36, size + 36),
+                          painter: _FocusRingPainter(
+                            fraction: s.focusRemaining.inSeconds /
+                                (s.focusPreviewMinutes * 60).clamp(1, 3600),
+                            color: mode.accent,
+                          ),
                         ),
                       ),
-                    ),
 
-                  // Drag Minutes Indicator
-                  if (_dragMinutes != null)
-                    Padding(
-                      padding: EdgeInsets.only(bottom: size * 0.62),
-                      child: _MiniChip(
-                        label: '${_dragMinutes!} min',
-                        color: mode.accent,
-                        ink: ink,
+                    // Drag Preview Hand
+                    if (_dragMinutes != null)
+                      RepaintBoundary(
+                        child: CustomPaint(
+                          size: Size(size, size),
+                          painter: _PreviewHandPainter(
+                            minutes: _dragMinutes!,
+                            color: mode.accent,
+                          ),
+                        ),
                       ),
-                    ),
-                ],
+
+                    // Drag Minutes Indicator
+                    if (_dragMinutes != null)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: size * 0.62),
+                        child: _MiniChip(
+                          label: '${_dragMinutes!} min',
+                          color: mode.accent,
+                          ink: ink,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
   }
 }
 
-/// Dial painter rendering 60 perimeter ticks with prominent quarter markers.
+/// Dial painter rendering a thin outer circle and 12 radial hour tick marks.
 class ClockDialPainter extends CustomPainter {
-  final Color tickColor;
-  final Color minuteTickColor;
+  final Color color;
+  final bool isDark;
 
   ClockDialPainter({
-    required this.tickColor,
-    required this.minuteTickColor,
+    required this.color,
+    required this.isDark,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final radius = size.width / 2.0;
-    // Calibrated against base dial radius (~122px)
     final scale = radius / 122.0;
+    final ringRadius = radius - (1.5 * scale);
 
-    final quarterTickLength = 10.0 * scale;
-    final hourTickLength = 7.5 * scale;
-    final minuteTickLength = 4.0 * scale;
+    final ringPaint = Paint()
+      ..color = color.withValues(alpha: isDark ? 0.35 : 0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8 * scale;
 
-    final quarterTickWidth = 2.4 * scale;
-    final hourTickWidth = 1.8 * scale;
-    final minuteTickWidth = 1.0 * scale;
-
-    final angle = 2.0 * math.pi / 60.0;
-
-    final quarterTickPaint = Paint()
-      ..color = tickColor
-      ..strokeWidth = quarterTickWidth
+    final tickPaint = Paint()
+      ..color = color.withValues(alpha: isDark ? 0.50 : 0.40)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 * scale
       ..strokeCap = StrokeCap.round;
 
-    final hourTickPaint = Paint()
-      ..color = tickColor
-      ..strokeWidth = hourTickWidth
-      ..strokeCap = StrokeCap.round;
+    final center = Offset(radius, radius);
 
-    final minuteTickPaint = Paint()
-      ..color = minuteTickColor
-      ..strokeWidth = minuteTickWidth
-      ..strokeCap = StrokeCap.round;
+    // 1. Thin outer perimeter circle
+    canvas.drawCircle(center, ringRadius, ringPaint);
+
+    // 2. 12 radial hour tick marks
+    final tickLength = 10.0 * scale;
+    final angle = 2.0 * math.pi / 12.0;
 
     canvas.save();
     canvas.translate(radius, radius);
 
-    for (int i = 0; i < 60; i++) {
-      final isQuarter = (i % 15 == 0);
-      final isHour = (i % 5 == 0);
-
-      // Draw tick marks
-      if (isQuarter) {
-        canvas.drawLine(
-          Offset(0.0, -radius + (1.5 * scale)),
-          Offset(0.0, -radius + (1.5 * scale) + quarterTickLength),
-          quarterTickPaint,
-        );
-      } else if (isHour) {
-        canvas.drawLine(
-          Offset(0.0, -radius + (1.5 * scale)),
-          Offset(0.0, -radius + (1.5 * scale) + hourTickLength),
-          hourTickPaint,
-        );
-      } else {
-        canvas.drawLine(
-          Offset(0.0, -radius + (1.5 * scale)),
-          Offset(0.0, -radius + (1.5 * scale) + minuteTickLength),
-          minuteTickPaint,
-        );
-      }
-
+    for (int i = 0; i < 12; i++) {
+      canvas.drawLine(
+        Offset(0.0, -ringRadius),
+        Offset(0.0, -ringRadius + tickLength),
+        tickPaint,
+      );
       canvas.rotate(angle);
     }
 
@@ -316,26 +277,19 @@ class ClockDialPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ClockDialPainter oldDelegate) {
-    return oldDelegate.tickColor != tickColor ||
-        oldDelegate.minuteTickColor != minuteTickColor;
+    return oldDelegate.color != color || oldDelegate.isDark != isDark;
   }
 }
 
-/// Hands painter rendering classic sculpted baton hour and minute hands
-/// with realistic drop shadows and a center pivot cap.
+/// Hands painter rendering minimalist linear hour and minute hands
+/// with rounded caps and a prominent solid center dot.
 class ClockHandsPainter extends CustomPainter {
   final DateTime time;
-  final Color hourHandColor;
-  final Color minuteHandColor;
-  final Color centerDotColor;
-  final Color shadowColor;
+  final Color handColor;
 
   ClockHandsPainter({
     required this.time,
-    required this.hourHandColor,
-    required this.minuteHandColor,
-    required this.centerDotColor,
-    required this.shadowColor,
+    required this.handColor,
   });
 
   @override
@@ -349,78 +303,38 @@ class ClockHandsPainter extends CustomPainter {
     final minuteAngle =
         2.0 * math.pi * ((time.minute + (time.second / 60.0)) / 60.0);
 
-    final hourHandPaint = Paint()
-      ..color = hourHandColor
+    final hourLength = radius * 0.48;
+    final minuteLength = radius * 0.74;
+
+    final handPaint = Paint()
+      ..color = handColor
+      ..strokeWidth = 2.8 * scale
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final dotPaint = Paint()
+      ..color = handColor
       ..style = PaintingStyle.fill;
 
-    final minuteHandPaint = Paint()
-      ..color = minuteHandColor
-      ..style = PaintingStyle.fill;
+    canvas.save();
+    canvas.translate(radius, radius);
 
-    // 1. Hour Hand (baton shape with tail)
-    {
-      canvas.save();
-      canvas.translate(radius, radius);
-      canvas.rotate(hourAngle);
+    // 1. Hour Hand (straight line from center, no tail)
+    canvas.save();
+    canvas.rotate(hourAngle);
+    canvas.drawLine(Offset.zero, Offset(0.0, -hourLength), handPaint);
+    canvas.restore();
 
-      final hw = 5.0 * scale;
-      final tail = 10.0 * scale;
-      final tip = -radius + (radius / 3.0) + (radius / 8.0);
+    // 2. Minute Hand (straight line from center, no tail)
+    canvas.save();
+    canvas.rotate(minuteAngle);
+    canvas.drawLine(Offset.zero, Offset(0.0, -minuteLength), handPaint);
+    canvas.restore();
 
-      final hourPath = Path()
-        ..moveTo(-hw, tail)
-        ..lineTo(-hw, tip)
-        ..lineTo(hw, tip)
-        ..lineTo(hw, tail)
-        ..close();
+    // 3. Center Dot (prominent solid circle matching the reference image)
+    canvas.drawCircle(Offset.zero, 5.8 * scale, dotPaint);
 
-      canvas.drawShadow(hourPath, shadowColor, 6.0 * scale, false);
-      canvas.drawPath(hourPath, hourHandPaint);
-      canvas.restore();
-    }
-
-    // 2. Minute Hand (slender baton shape with tail)
-    {
-      canvas.save();
-      canvas.translate(radius, radius);
-      canvas.rotate(minuteAngle);
-
-      final mw = 3.5 * scale;
-      final tail = 13.0 * scale;
-      final tip = -radius + (radius / 10.0);
-
-      final minutePath = Path()
-        ..moveTo(-mw, tail)
-        ..lineTo(-mw, tip)
-        ..lineTo(mw, tip)
-        ..lineTo(mw, tail)
-        ..close();
-
-      canvas.drawShadow(minutePath, shadowColor, 4.0 * scale, false);
-      canvas.drawPath(minutePath, minuteHandPaint);
-      canvas.restore();
-    }
-
-    // 3. Center Pivot Cap
-    {
-      final center = Offset(radius, radius);
-      // Outer collar / cap in accent color
-      canvas.drawCircle(
-        center,
-        4.5 * scale,
-        Paint()
-          ..color = centerDotColor
-          ..style = PaintingStyle.fill,
-      );
-      // Inner pin in hour hand color
-      canvas.drawCircle(
-        center,
-        2.0 * scale,
-        Paint()
-          ..color = hourHandColor
-          ..style = PaintingStyle.fill,
-      );
-    }
+    canvas.restore();
   }
 
   @override
@@ -428,10 +342,7 @@ class ClockHandsPainter extends CustomPainter {
     return oldDelegate.time.second != time.second ||
         oldDelegate.time.minute != time.minute ||
         oldDelegate.time.hour != time.hour ||
-        oldDelegate.hourHandColor != hourHandColor ||
-        oldDelegate.minuteHandColor != minuteHandColor ||
-        oldDelegate.centerDotColor != centerDotColor ||
-        oldDelegate.shadowColor != shadowColor;
+        oldDelegate.handColor != handColor;
   }
 }
 

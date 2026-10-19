@@ -143,10 +143,10 @@ class AyahCard extends StatelessWidget {
                       fontSize: (isSmall ? 18.0 : 22.0) * s.arabicTextScale,
                       height: 1.6,
                       fontWeight: FontWeight.w400,
-                      color: kWatchfaces[s.watchface].isImage
+                      color: kWatchfaces[s.effectiveWatchface].isImage
                           ? Colors.white.withValues(alpha: 0.92)
                           : mode.ink.withValues(alpha: 0.70),
-                      shadows: kWatchfaces[s.watchface].isImage
+                      shadows: kWatchfaces[s.effectiveWatchface].isImage
                           ? const [
                               Shadow(
                                 color: Colors.black87,
@@ -205,7 +205,7 @@ class AyahCard extends StatelessWidget {
                         dim: active != null && i > active,
                         mode: s.themeMode,
                         playing: playing,
-                        isImage: kWatchfaces[s.watchface].isImage,
+                        isImage: kWatchfaces[s.effectiveWatchface].isImage,
                       ),
                   ],
                 ),
@@ -225,10 +225,10 @@ class AyahCard extends StatelessWidget {
                 fontSize: isSmall ? 13.0 : 15.5,
                 height: isSmall ? 1.4 : 1.5,
                 fontStyle: FontStyle.italic,
-                color: kWatchfaces[s.watchface].isImage
+                color: kWatchfaces[s.effectiveWatchface].isImage
                     ? Colors.white.withValues(alpha: 0.88)
                     : mode.ink.withValues(alpha: 0.62),
-                shadows: kWatchfaces[s.watchface].isImage
+                shadows: kWatchfaces[s.effectiveWatchface].isImage
                     ? const [
                         Shadow(
                           color: Color(0xCC000000),

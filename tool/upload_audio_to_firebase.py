@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NOOR QURAN - Firebase Storage & Firestore Audio Uploader
+HKQURAN - Firebase Storage & Firestore Audio Uploader
 Uploads compressed Quran audio files to Firebase Cloud Storage and syncs recitation metadata to Firestore.
 """
 
@@ -173,7 +173,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 68)
-    print("🚀 NOOR QURAN — FIREBASE AUDIO & METADATA UPLOADER")
+    print("🚀 HKQURAN — FIREBASE AUDIO & METADATA UPLOADER")
     print(f"Target Project: {PROJECT_ID}")
     print(f"Storage Bucket: {args.bucket}")
     print("=" * 68)

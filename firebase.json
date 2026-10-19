@@ -4,7 +4,8 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.exe"
     ],
     "rewrites": [
       {
@@ -31,10 +32,10 @@
     "platforms": {
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "studio-5996533553-9d4ec",
+          "projectId": "hkquranapp",
           "configurations": {
-            "web": "1:1090465031066:web:48d1dcad048e74e009d023",
-            "windows": "1:1090465031066:web:74f8b9514965365209d023"
+            "web": "1:204776724790:web:8222705c7208b3b9a07b97",
+            "windows": "1:204776724790:web:c7cba766be097e20a07b97"
           }
         }
       }

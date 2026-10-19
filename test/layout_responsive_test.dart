@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:noor/data/models.dart';
-import 'package:noor/state/app_state.dart';
-import 'package:noor/ui/home_screen.dart';
-import 'package:noor/ui/ayah_card.dart';
-import 'package:noor/ui/clock_view.dart';
-import 'package:noor/ui/player_bar.dart';
+import 'package:hkquran/data/models.dart';
+import 'package:hkquran/state/app_state.dart';
+import 'package:hkquran/ui/home_screen.dart';
+import 'package:hkquran/ui/ayah_card.dart';
+import 'package:hkquran/ui/clock_view.dart';
+import 'package:hkquran/ui/player_bar.dart';
+import 'package:hkquran/ui/todo_card.dart';
 
 void main() {
   setUpAll(() async {
@@ -92,7 +93,7 @@ void main() {
     state.dispose();
   });
 
-  testWidgets('PlayerBar includes repeat toggle chip in the title area', (tester) async {
+  testWidgets('PlayerBar does not include repeat toggle chip', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = await AppState.load();
 
@@ -110,16 +111,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Repeat toggle chip is inside PlayerBar
+    // Repeat toggle chip is not in PlayerBar
     expect(find.descendant(
       of: find.byType(PlayerBar),
       matching: find.byIcon(Icons.repeat_rounded),
-    ), findsOneWidget);
-
-    expect(find.descendant(
-      of: find.byType(PlayerBar),
-      matching: find.text('1x'),
-    ), findsOneWidget);
+    ), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -184,6 +180,95 @@ void main() {
 
     // Clock is visible again!
     expect(find.byType(ClockView), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 30));
+    state.dispose();
+  });
+
+  testWidgets('Mobile viewport layout: PlayerBar, dock, TodoCard and Translation do not overlap', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    SharedPreferences.setMockInitialValues({});
+    final state = await AppState.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: state,
+          child: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Navigation dock is at the bottom
+    final surahsIconFinder = find.byIcon(Icons.format_list_numbered_rounded);
+    expect(surahsIconFinder, findsOneWidget);
+    final dockRect = tester.getRect(surahsIconFinder);
+
+    // 2. PlayerBar is stacked cleanly above the dock
+    final playerBarFinder = find.byType(PlayerBar);
+    expect(playerBarFinder, findsOneWidget);
+    final playerBarRect = tester.getRect(playerBarFinder);
+
+    // Assert PlayerBar is strictly above the navigation dock (no overlap)
+    expect(playerBarRect.bottom, lessThanOrEqualTo(dockRect.top));
+
+    // 3. TodoCard is stacked cleanly above the PlayerBar and centered horizontally on mobile
+    final todoFinder = find.byType(TodoCard);
+    expect(todoFinder, findsOneWidget);
+    final todoRect = tester.getRect(todoFinder);
+    expect(todoRect.bottom, lessThanOrEqualTo(playerBarRect.top));
+    expect((todoRect.center.dx - 195.0).abs(), lessThan(2.0));
+
+    // 4. Translation button is at top-end alongside wallpaper (not colliding with bottom bar)
+    final translationFinder = find.byIcon(Icons.translate_rounded);
+    expect(translationFinder, findsOneWidget);
+    final translationRect = tester.getRect(translationFinder);
+    expect(translationRect.top, lessThan(80.0));
+    expect(translationRect.bottom, lessThan(playerBarRect.top));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 30));
+    state.dispose();
+  });
+
+  testWidgets('Desktop: footer credit displays Salaheddine kennouda below PlayerBar', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    SharedPreferences.setMockInitialValues({});
+    final state = await AppState.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppStateScope(
+          state: state,
+          child: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final creditFinder = find.text('Salaheddine kennouda');
+    expect(creditFinder, findsOneWidget);
+
+    final creditRect = tester.getRect(creditFinder);
+    final playerBarRect = tester.getRect(find.byType(PlayerBar));
+
+    // Credit is positioned below PlayerBar and centered horizontally
+    expect(creditRect.top, greaterThanOrEqualTo(playerBarRect.bottom - 4.0));
+    expect((creditRect.center.dx - 640.0).abs(), lessThan(5.0));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 30));

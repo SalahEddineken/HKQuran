@@ -1,0 +1,21 @@
+name: path_provider_foundation
+description: Stub for path_provider_foundation on non-Apple desktop/web platforms.
+version: 2.6.0
+
+environment:
+  sdk: ^3.10.3
+  flutter: ">=3.38.4"
+
+flutter:
+  plugin:
+    implements: path_provider
+    platforms:
+      ios:
+        dartPluginClass: PathProviderFoundation
+      macos:
+        dartPluginClass: PathProviderFoundation
+
+dependencies:
+  flutter:
+    sdk: flutter
+  path_provider_platform_interface: ^2.1.0

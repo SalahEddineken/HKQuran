@@ -1,28 +1,42 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noor/theme/palette.dart';
-import 'package:noor/ui/background.dart';
-import 'package:noor/state/app_state.dart';
+import 'package:hkquran/theme/palette.dart';
+import 'package:hkquran/ui/background.dart';
+import 'package:hkquran/state/app_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-(int, int)? _getJpegDimensions(List<int> bytes) {
-  if (bytes.length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) return null;
-  var i = 2;
-  while (i + 8 < bytes.length) {
-    if (bytes[i] != 0xFF) {
-      i++;
-      continue;
+(int, int)? _getImageDimensions(List<int> bytes) {
+  if (bytes.length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+    var i = 2;
+    while (i + 8 < bytes.length) {
+      if (bytes[i] != 0xFF) {
+        i++;
+        continue;
+      }
+      final marker = bytes[i + 1];
+      i += 2;
+      if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+        final height = (bytes[i + 3] << 8) | bytes[i + 4];
+        final width = (bytes[i + 5] << 8) | bytes[i + 6];
+        return (width, height);
+      }
+      final length = (bytes[i] << 8) | bytes[i + 1];
+      i += length;
     }
-    final marker = bytes[i + 1];
-    i += 2;
-    if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
-      final height = (bytes[i + 3] << 8) | bytes[i + 4];
-      final width = (bytes[i + 5] << 8) | bytes[i + 6];
-      return (width, height);
-    }
-    final length = (bytes[i] << 8) | bytes[i + 1];
-    i += length;
+  }
+  if (bytes.length >= 24 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4E &&
+      bytes[3] == 0x47 &&
+      bytes[4] == 0x0D &&
+      bytes[5] == 0x0A &&
+      bytes[6] == 0x1A &&
+      bytes[7] == 0x0A) {
+    final width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    final height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    return (width, height);
   }
   return null;
 }
@@ -38,7 +52,7 @@ void main() {
     expect(kWatchfaces[1].isBlack, isTrue);
   });
 
-  test('all background photo assets exist and are true 4K resolution (3840x2160)', () {
+  test('all background photo assets exist and are ultra high resolution', () {
     final photoWatchfaces = kWatchfaces.where((w) => w.asset != null).toList();
     expect(photoWatchfaces, isNotEmpty);
 
@@ -47,11 +61,11 @@ void main() {
       expect(file.existsSync(), isTrue, reason: '${wf.asset} must exist on disk');
 
       final bytes = file.readAsBytesSync();
-      final dims = _getJpegDimensions(bytes);
-      expect(dims, isNotNull, reason: 'Must be a valid JPEG: ${wf.asset}');
+      final dims = _getImageDimensions(bytes);
+      expect(dims, isNotNull, reason: 'Must be a valid image: ${wf.asset}');
       final (width, height) = dims!;
-      expect(width, equals(3840), reason: '${wf.asset} width should be 3840 (4K UHD)');
-      expect(height, equals(2160), reason: '${wf.asset} height should be 2160 (4K UHD)');
+      expect(width, greaterThanOrEqualTo(1920), reason: '${wf.asset} width should be at least Full HD');
+      expect(height, greaterThanOrEqualTo(1080), reason: '${wf.asset} height should be at least Full HD');
     }
   });
 

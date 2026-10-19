@@ -15,7 +15,7 @@ class WatchfaceBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStateScope.of(context);
-    final wf = kWatchfaces[s.watchface];
+    final wf = kWatchfaces[s.effectiveWatchface];
     final solid = wf.isWhite
         ? const Color(0xFFFAFAFA)
         : const Color(0xFF0F0F12);
@@ -36,7 +36,7 @@ class WatchfaceBackground extends StatelessWidget {
           // Background photo (only rendered if isImage)
           Positioned.fill(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 600),
+              duration: const Duration(milliseconds: 300),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, anim) =>

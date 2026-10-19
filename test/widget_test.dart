@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:noor/audio/ambient_mixer.dart';
-import 'package:noor/audio/chapter_player.dart';
-import 'package:noor/data/hijri.dart';
-import 'package:noor/data/models.dart';
-import 'package:noor/data/quran_api.dart';
-import 'package:noor/state/app_state.dart';
-import 'package:noor/ui/focus_pill.dart';
+import 'package:hkquran/audio/ambient_mixer.dart';
+import 'package:hkquran/audio/chapter_player.dart';
+import 'package:hkquran/data/hijri.dart';
+import 'package:hkquran/data/models.dart';
+import 'package:hkquran/data/quran_api.dart';
+import 'package:hkquran/state/app_state.dart';
+import 'package:hkquran/ui/focus_pill.dart';
 
 void main() {
   test('114 surahs with sane metadata', () {
@@ -85,27 +85,15 @@ void main() {
         'desert',
       ],
     );
-    expect(kAmbientPresets.length, 6);
+    expect(kAmbientPresets.length, 5);
 
     // Apply preset
     final preset = kAmbientPresets.first;
     mixer.applyPreset(preset);
     expect(mixer.isPresetActive(preset), isTrue);
-    expect(mixer.activePreset?.id, preset.id);
     expect(mixer.activeCount, preset.levels.length);
 
     // Ambient sound plays immediately when activated
-    expect(mixer.effective(0), greaterThan(0.0));
-
-    // When syncWithReciter is enabled and reciter is paused, effective volume ducks to 0
-    mixer.setSyncWithReciter(true);
-    expect(mixer.syncWithReciter, isTrue);
-    expect(mixer.isReciterPlaying, isFalse);
-    expect(mixer.effective(0), 0.0);
-
-    // When reciter plays, effective volume is restored
-    mixer.onReciterPlaybackChanged(true);
-    expect(mixer.isReciterPlaying, isTrue);
     expect(mixer.effective(0), greaterThan(0.0));
 
     // Mute all
@@ -409,6 +397,93 @@ void main() {
 
     expect(open, isTrue);
     expect(find.text('15'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    state.dispose();
+  });
+
+  testWidgets('30 min and 45 min preset buttons are clickable within stack and Column bounds', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = await AppState.load();
+    bool open = false;
+
+    Widget buildScreen() => MaterialApp(
+      home: Scaffold(
+        body: AppStateScope(
+          state: state,
+          child: StatefulBuilder(
+            builder: (context, setState) => Stack(
+              children: [
+                // Tap-outside detector behind FocusPill
+                if (open)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => open = false),
+                      child: const ColoredBox(color: Colors.transparent),
+                    ),
+                  ),
+                // Top center FocusPill inside Positioned -> Center -> Column
+                Positioned(
+                  top: 66,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FocusPill(
+                          open: open,
+                          onOpenChanged: (v) => setState(() => open = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Test 30 min button
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    // Open presets
+    await tester.tap(find.text('Focus'));
+    await tester.pumpAndSettle();
+    expect(open, isTrue);
+
+    // Tap 30 min button
+    await tester.tap(find.text('30'));
+    await tester.pumpAndSettle();
+
+    // Must start 30 min session, not be swallowed by tap-outside detector
+    expect(state.focusing, isTrue);
+    expect(state.focusPreviewMinutes, 30);
+    expect(open, isFalse);
+
+    // Stop focus
+    state.endFocus();
+    await tester.pumpAndSettle();
+    expect(state.focusing, isFalse);
+
+    // Open presets again
+    await tester.tap(find.text('Focus'));
+    await tester.pumpAndSettle();
+    expect(open, isTrue);
+
+    // Tap 45 min button
+    await tester.tap(find.text('45'));
+    await tester.pumpAndSettle();
+
+    // Must start 45 min session, not be swallowed by tap-outside detector
+    expect(state.focusing, isTrue);
+    expect(state.focusPreviewMinutes, 45);
+    expect(open, isFalse);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

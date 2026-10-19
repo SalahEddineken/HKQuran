@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:noor/data/quran_api.dart';
+import 'package:hkquran/data/quran_api.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

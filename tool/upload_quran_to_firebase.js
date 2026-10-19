@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Noor Quran - Firebase Cloud Firestore Database Uploader
+ * HKQuran - Firebase Cloud Firestore Database Uploader
  * Uploads all 114 Surahs, 6,236 Ayahs, 30 Juzs, and Metadata to Firebase.
  */
 
@@ -81,7 +81,7 @@ async function batchWrite(token, writes) {
 
 async function main() {
   console.log('========================================================');
-  console.log('🚀 NOOR QURAN - FIREBASE CLOUD FIRESTORE UPLOADER');
+  console.log('🚀 HKQURAN - FIREBASE CLOUD FIRESTORE UPLOADER');
   console.log(`Target Project: ${PROJECT_ID}`);
   console.log('========================================================\n');
 
@@ -103,7 +103,7 @@ async function main() {
   const surahsMeta = JSON.parse(fs.readFileSync(surahsMetaPath, 'utf8'));
   await writeDocument(token, 'metadata/surahs', { list: surahsMeta });
   await writeDocument(token, 'metadata/app_info', {
-    name: 'Noor',
+    name: 'HKQuran',
     version: '1.0.0',
     totalSurahs: 114,
     totalVerses: 6236,

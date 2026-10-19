@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,13 +8,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../audio/ambient_mixer.dart';
 import '../audio/chapter_player.dart';
 import '../data/models.dart';
+import '../data/prayer_times_service.dart';
 import '../data/quran_api.dart';
+import '../data/todo.dart';
+import '../services/notification_service.dart';
 import '../theme/palette.dart';
 import '../theme/strings.dart';
 
 /// App-wide state + persistence. UI listens through [AppStateScope].
 class AppState extends ChangeNotifier {
-  AppState._(this.prefs) {
+  AppState._(this.prefs, this.prayerService) {
     _instance = this;
     player = ChapterPlayer(QuranApi(prefs: prefs));
     mixer = AmbientMixer();
@@ -26,14 +31,39 @@ class AppState extends ChangeNotifier {
   final SharedPreferences prefs;
   late final ChapterPlayer player;
   late final AmbientMixer mixer;
+  final PrayerTimesService prayerService;
 
-  static Future<AppState> load() async =>
-      AppState._(await SharedPreferences.getInstance());
+  static Future<AppState> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final prayerService = await PrayerTimesService.create();
+    return AppState._(prefs, prayerService);
+  }
+
+  // ---- Mawaqit (Prayer Times) ----
+  bool desktopMawaqitOpen = true;
+  bool desktopMawaqitCollapsed = false;
+
+  void toggleDesktopMawaqit() {
+    desktopMawaqitOpen = !desktopMawaqitOpen;
+    prefs.setBool('desktopMawaqitOpen', desktopMawaqitOpen);
+    notifyListeners();
+  }
+
+  void toggleDesktopMawaqitCollapse() {
+    desktopMawaqitCollapsed = !desktopMawaqitCollapsed;
+    prefs.setBool('desktopMawaqitCollapsed', desktopMawaqitCollapsed);
+    notifyListeners();
+  }
 
   // ---- persisted settings ----
   Locale locale = const Locale('en');
   AppThemeMode themeMode = AppThemeMode.dark;
   int watchface = 2;
+  int? _previewWatchface;
+
+  int get effectiveWatchface => _previewWatchface ?? watchface;
+  int? get previewingWatchface => _previewWatchface;
+
   int reciterId = kReciters.first.id;
   int chapter = 1;
   bool showTranslation = true;
@@ -52,6 +82,10 @@ class AppState extends ChangeNotifier {
   DateTime? focusEnd;
   int focusPreviewMinutes = 0;
 
+  // ---- to-do list ----
+  List<TodoItem> todos = [];
+  bool todoCollapsed = false;
+
   bool get ar => locale.languageCode == 'ar';
   bool get focusing => focusEnd != null && focusEnd!.isAfter(DateTime.now());
 
@@ -66,7 +100,7 @@ class AppState extends ChangeNotifier {
 
   void _restore() {
     locale = Locale(prefs.getString('locale') ?? 'en');
-    watchface = (prefs.getInt('watchface') ?? 1).clamp(
+    watchface = (prefs.getInt('watchface') ?? 2).clamp(
       0,
       kWatchfaces.length - 1,
     );
@@ -85,24 +119,50 @@ class AppState extends ChangeNotifier {
     final savedRepeat = prefs.getInt('repeatMode') ?? 0;
     player.repeatMode = AudioRepeatMode.values[savedRepeat.clamp(0, AudioRepeatMode.values.length - 1)];
 
-    final savedSync = prefs.getBool('syncAmbient') ?? false;
     final vols = (prefs.getStringList(
       'ambVol',
     ))?.map((e) => double.tryParse(e) ?? 0.7).toList();
     final ons = prefs.getStringList('ambOn')?.map((e) => e == '1').toList();
     final master = prefs.getDouble('ambMaster') ?? 0.8;
     if (vols != null && ons != null) {
-      mixer.restore(vols, ons, master, savedSync: savedSync, initialReciterPlaying: player.playing);
-    } else {
-      mixer.syncWithReciter = savedSync;
+      mixer.restore(vols, ons, master);
     }
     reciterVolume = (prefs.getDouble('reciterVol') ?? 1.0).clamp(0.0, 1.0);
     player.setVolume(reciterVolume);
+
+    final savedTodos = prefs.getStringList('todos_list');
+    if (savedTodos != null) {
+      todos = savedTodos.map((s) {
+        try {
+          return TodoItem.fromJson(jsonDecode(s) as Map<String, dynamic>);
+        } catch (_) {
+          return null;
+        }
+      }).whereType<TodoItem>().toList();
+    } else {
+      todos = [];
+    }
+    todoCollapsed = prefs.getBool('todoCollapsed') ?? false;
+    desktopMawaqitOpen = prefs.getBool('desktopMawaqitOpen') ?? true;
+    desktopMawaqitCollapsed = prefs.getBool('desktopMawaqitCollapsed') ?? false;
+
+    if (!kIsWeb) {
+      prayerService.onPrayerArrived = (prayer, ar, en) {
+        if (prayerService.notificationEnabled) {
+          NotificationService.instance.showPrayerNotification(
+            prayerNameAr: ar,
+            prayerNameEn: en,
+            cityName: prayerService.cityName,
+          );
+        }
+      };
+    }
+
     _applyUriOverrides();
   }
 
   void _syncThemeWithWatchface() {
-    final wf = kWatchfaces[watchface];
+    final wf = kWatchfaces[effectiveWatchface];
     themeMode = wf.isWhite ? AppThemeMode.light : AppThemeMode.dark;
   }
 
@@ -148,6 +208,8 @@ class AppState extends ChangeNotifier {
     };
     // Forward mixer changes so ambient sliders/toggles update the UI live.
     mixer.addListener(_onMixer);
+    // Forward prayer time changes
+    prayerService.addListener(notifyListeners);
   }
 
   PlayerStatus? _lastPlayerStatus;
@@ -166,10 +228,6 @@ class AppState extends ChangeNotifier {
     _lastPlayerPlaying = player.playing;
     _lastPlayerChapter = player.chapter;
     _lastPlayerVerse = player.currentVerse;
-
-    if (playingChanged) {
-      mixer.onReciterPlaybackChanged(player.playing);
-    }
 
     // Only notify AppStateScope dependents if macroscopic playback state changed
     // (play/pause, chapter, verse change, or status), NOT on every individual word change.
@@ -211,7 +269,16 @@ class AppState extends ChangeNotifier {
 
   void cycleTheme() => cycleWatchface();
 
+  void previewWatchface(int? index) {
+    if (_previewWatchface != index) {
+      _previewWatchface = index;
+      _syncThemeWithWatchface();
+      notifyListeners();
+    }
+  }
+
   void setWatchface(int i) {
+    _previewWatchface = null;
     watchface = i.clamp(0, kWatchfaces.length - 1);
     _syncThemeWithWatchface();
     prefs.setInt('watchface', watchface);
@@ -234,11 +301,14 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleTranslation() {
-    showTranslation = !showTranslation;
+  void setTranslation(bool val) {
+    if (showTranslation == val) return;
+    showTranslation = val;
     prefs.setBool('translation', showTranslation);
     notifyListeners();
   }
+
+  void toggleTranslation() => setTranslation(!showTranslation);
 
   void toggleAutoAdvance() {
     autoAdvance = !autoAdvance;
@@ -270,8 +340,6 @@ class AppState extends ChangeNotifier {
   bool isBookmarked(int ch, int v) =>
       bookmarkChapter == ch && bookmarkVerse == v;
 
-  VoidCallback? onOpenAmbientPanel;
-
   void saveAmbient() {
     prefs.setStringList(
       'ambVol',
@@ -282,27 +350,6 @@ class AppState extends ChangeNotifier {
       mixer.channels.map((c) => c.on ? '1' : '0').toList(),
     );
     prefs.setDouble('ambMaster', mixer.master);
-    prefs.setBool('syncAmbient', mixer.syncWithReciter);
-  }
-
-  void setSyncAmbientWithReciter(bool v) {
-    mixer.setSyncWithReciter(v);
-    saveAmbient();
-    notifyListeners();
-  }
-
-  void applyVibePreset(AmbientPreset preset, {bool startReciterIfPaused = true}) {
-    final alreadyActive = mixer.isPresetActive(preset);
-    mixer.applyPreset(preset);
-    saveAmbient();
-    if (!alreadyActive && startReciterIfPaused && !player.playing) {
-      if (player.status == PlayerStatus.idle || !player.isAudioSourceLoaded) {
-        openSurah(chapter, autoplay: true);
-      } else {
-        player.play();
-      }
-    }
-    notifyListeners();
   }
 
   void setReciterVolume(double v) {
@@ -373,6 +420,56 @@ class AppState extends ChangeNotifier {
     await player.reloadSamePosition();
   }
 
+  // ---- to-do list actions ----
+  void addTodo(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final item = TodoItem(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      text: trimmed,
+      completed: false,
+      createdAt: DateTime.now(),
+    );
+    todos = [...todos, item];
+    _saveTodos();
+    notifyListeners();
+  }
+
+  void toggleTodo(String id) {
+    final idx = todos.indexWhere((t) => t.id == id);
+    if (idx != -1) {
+      final item = todos[idx];
+      todos = List.of(todos)..[idx] = item.copyWith(completed: !item.completed);
+      _saveTodos();
+      notifyListeners();
+    }
+  }
+
+  void removeTodo(String id) {
+    todos = todos.where((t) => t.id != id).toList();
+    _saveTodos();
+    notifyListeners();
+  }
+
+  void clearCompletedTodos() {
+    todos = todos.where((t) => !t.completed).toList();
+    _saveTodos();
+    notifyListeners();
+  }
+
+  void setTodoCollapsed(bool collapsed) {
+    todoCollapsed = collapsed;
+    prefs.setBool('todoCollapsed', collapsed);
+    notifyListeners();
+  }
+
+  void toggleTodoCollapsed() => setTodoCollapsed(!todoCollapsed);
+
+  void _saveTodos() {
+    final list = todos.map((t) => jsonEncode(t.toJson())).toList();
+    prefs.setStringList('todos_list', list);
+  }
+
   @override
   void notifyListeners() {
     try {
@@ -391,8 +488,10 @@ class AppState extends ChangeNotifier {
     _saveTimer?.cancel();
     player.removeListener(_onPlayer);
     mixer.removeListener(_onMixer);
+    prayerService.removeListener(notifyListeners);
     player.dispose();
     mixer.dispose();
+    prayerService.dispose();
     super.dispose();
   }
 }

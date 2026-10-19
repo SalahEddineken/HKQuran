@@ -53,3 +53,6 @@ test/tmpf/
 
 # Large binary audio assets (streamed via CDN / Firebase Storage)
 assets/audio/
+
+# Firebase CLI cache
+.firebase/

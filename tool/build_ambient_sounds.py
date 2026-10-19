@@ -161,7 +161,7 @@ def encode_mp3(audio, sr, bitrate_kbps=192):
     return mp3_data
 
 def main():
-    headers = {"User-Agent": "NoorQuranApp/1.0 (ambient sound curation)"}
+    headers = {"User-Agent": "HKQuranApp/1.0 (ambient sound curation)"}
     print(f"Mastering 10 ambient soundscapes to: {TARGET_DIR}")
 
     results = []
