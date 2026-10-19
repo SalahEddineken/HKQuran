@@ -628,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {
                           HapticFeedback.lightImpact();
                           launchUrl(
-                            Uri.parse('https://github.com/SalahEddineken/Quran/releases/latest'),
+                            Uri.parse('https://github.com/SalahEddineken/HKQuran/releases/latest'),
                             mode: LaunchMode.externalApplication,
                           );
                         },

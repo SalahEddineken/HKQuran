@@ -1,7 +1,7 @@
 #define MyAppName "Quran"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "SalahEddineken"
-#define MyAppURL "https://github.com/SalahEddineken/Quran"
+#define MyAppURL "https://github.com/SalahEddineken/HKQuran"
 #define MyAppExeName "hkquran.exe"
 
 [Setup]

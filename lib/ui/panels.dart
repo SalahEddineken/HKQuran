@@ -1292,7 +1292,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   : 'Download desktop app (Windows) →',
               onTap: () {
                 HapticFeedback.lightImpact();
-                _openUrl('https://github.com/SalahEddineken/Quran/releases/latest');
+                _openUrl('https://github.com/SalahEddineken/HKQuran/releases/latest');
               },
             ),
 
